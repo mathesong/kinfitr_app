@@ -17,25 +17,10 @@ library(dplyr)
 library(purrr)
 library(jsonlite)
 
-# New filename
-generate_new_filename <- function() {
+# Fixed filename
+out_filename <- "kinfitr_config.json"
 
-  current_date <- as.character(as.Date(Sys.Date()))
-  random_seq <- stringi::stri_rand_strings(1, 4)
-  paste0("config_", current_date, "_id-", random_seq, ".json")
-
-}
-
-out_filename <- generate_new_filename()
-
-# Clear out old files
-json_files <- tibble::tibble(
-  filename = list.files("output", pattern = ".json",full.names = T),
-  ) %>%
-  mutate(Date = stringr::str_match(filename, "config_(.*)_id")[,2],
-         Days_ago = as.numeric(Sys.Date() - as.Date(Date)))
-
-file.remove(json_files$filename[json_files$Days_ago > 7])
+# Note: Directory paths and config file handling will be managed by launch_app.R
 
 
 
@@ -60,16 +45,16 @@ ui <- fluidPage(theme = shinytheme("flatly"),
       # p("Once finished defining how each part of the data should be modelled, ",
       #   "you can download ",
       #   "the resulting config file by clicking the button below."),
-      h2("Analysis Name"),
-      p(glue("Use this field to create derivatives in a specified output folder ",
-             "(e.g. enter 'raclopride_analysis' for derivatives/kinfitr/raclopride_analysis). ",
-             "This allows multiple different analyses to be performed ",
-             "using different settings (e.g. for two ",
-             "different radiotracers, or for 60 vs 90 minute acquisitions)."
-      ),
-      style = "font-size:14px;"),
-      textInput(inputId = "analysis_folder", label = "Output folder", value = ""),
-      br(),
+      # h2("Analysis Name"),
+      # p(glue("Use this field to create derivatives in a specified output folder ",
+      #        "(e.g. enter 'raclopride_analysis' for derivatives/kinfitr/raclopride_analysis). ",
+      #        "This allows multiple different analyses to be performed ",
+      #        "using different settings (e.g. for two ",
+      #        "different radiotracers, or for 60 vs 90 minute acquisitions)."
+      # ),
+      # style = "font-size:14px;"),
+      # textInput(inputId = "analysis_folder", label = "Output folder", value = ""),
+      # br(),
       # h2("Region"),
       # p(glue("Use these options to define the region to which the model should ",
       #        "be applied. ",
