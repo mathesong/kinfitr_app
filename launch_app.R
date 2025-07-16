@@ -2,7 +2,7 @@ launch_kinfitr_app <- function(bids_dir, derivatives_dir = NULL, subfolder = "Pr
   
   # Set default derivatives_dir if not provided
   if (is.null(derivatives_dir)) {
-    derivatives_dir <- file.path(bids_dir, "derivatives", "kinfitr")
+    derivatives_dir <- file.path(bids_dir, "derivatives")
   }
   
   # Normalize paths to avoid double slashes
