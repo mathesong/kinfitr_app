@@ -1,4 +1,4 @@
-
+roxygen2::roxygenise()
 devtools::load_all()
 
 bids_dir <- "/home/granville/Repositories/OpenNeuro/ds004869/"

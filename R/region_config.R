@@ -312,7 +312,7 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
                     class = "btn-danger"),
         br(), br(), br(), br(),
         actionButton("remove_all_regions", "Remove All Regions", 
-                    class = "btn-danger"),
+                    class = "btn-danger", style = "background-color: #8B0000; border-color: #8B0000;"),
         
         hr(),
         actionButton("close_app", "Close App", 
