@@ -4,6 +4,7 @@
 # Load the package functions
 source("R/run_app.R")
 source("R/region_config.R")
+source("R/region_utils.R")
 
 # Run the application
 run_app()

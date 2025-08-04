@@ -10,9 +10,11 @@ find_tacs_folders <- function(derivatives_folder) {
   # Find all subdirectories in the derivatives folder
   subdirs <- list.dirs(derivatives_folder, recursive = FALSE, full.names = TRUE)
   
-  # Function to check if a directory contains *_tacs.tsv files
+  # Function to check if a directory contains *_tacs.tsv files (excluding combined files)
   has_tacs_files <- function(dir_path) {
     tacs_files <- list.files(dir_path, pattern = "*_tacs\\.tsv$", recursive = TRUE)
+    # Exclude combined TACs files
+    tacs_files <- tacs_files[!grepl("desc-combined_tacs\\.tsv$", tacs_files)]
     return(length(tacs_files) > 0)
   }
   
@@ -35,9 +37,11 @@ find_tacs_folders <- function(derivatives_folder) {
 #' @export
 summarise_tacs_descriptions <- function(dir_path) {
   
-  # Get all *_tacs.tsv files in this directory
+  # Get all *_tacs.tsv files in this directory (excluding combined files)
   tacs_files <- list.files(dir_path, pattern = "*_tacs\\.tsv$", 
                           recursive = TRUE, full.names = TRUE)
+  # Exclude combined TACs files
+  tacs_files <- tacs_files[!grepl("desc-combined_tacs\\.tsv$", tacs_files)]
   
   if (length(tacs_files) == 0) {
     return(NULL)
@@ -185,34 +189,50 @@ interpret_bids_key_value_pairs <- function(key_value_strings) {
 #'
 #' @description Launch a separate Shiny app for defining brain regions
 #'
-#' @param bids_dir Character string path to the BIDS directory
-#' @param output_dir Character string path for output (default: bids_dir/code/kinfitr)
+#' @param bids_dir Character string path to the BIDS directory (default: NULL)
+#' @param derivatives_dir Character string path to derivatives directory (default: bids_dir/derivatives if bids_dir provided)
+#' @param kinfitr_output_foldername Character string name for kinfitr output folder within derivatives (default: "kinfitr")
+#' @details Config files (kinfitr_regions.tsv) are saved to:
+#'   - bids_dir/code/kinfitr if bids_dir provided
+#'   - derivatives_dir/kinfitr_output_foldername if no bids_dir
 #' @export
-region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
+region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfitr_output_foldername = "kinfitr") {
   
-  # Set default output directory
-  if (is.null(output_dir)) {
-    output_dir <- file.path(bids_dir, "code", "kinfitr")
+  # Set derivatives directory logic
+  if (is.null(derivatives_dir)) {
+    if (is.null(bids_dir)) {
+      stop("Either bids_dir or derivatives_dir must be provided", call. = FALSE)
+    }
+    # Default: bids_dir/derivatives
+    derivatives_dir <- file.path(bids_dir, "derivatives")
   }
   
-  # Validate BIDS directory
-  if (!dir.exists(bids_dir)) {
+  # Validate directories
+  if (!is.null(bids_dir) && !dir.exists(bids_dir)) {
     stop(paste("BIDS directory does not exist:", bids_dir), call. = FALSE)
   }
   
-  # Create output directory if it doesn't exist
-  if (!dir.exists(output_dir)) {
-    dir.create(output_dir, recursive = TRUE)
-    cat("Created output directory:", output_dir, "\n")
+  # Set config directory (for kinfitr_regions.tsv)
+  if (!is.null(bids_dir)) {
+    # Standard BIDS structure: bids_dir/code/kinfitr
+    config_dir <- file.path(bids_dir, "code", "kinfitr")
+  } else {
+    # No BIDS dir: use derivatives/kinfitr_output_foldername
+    config_dir <- file.path(derivatives_dir, kinfitr_output_foldername)
   }
   
-  # Set derivatives directory (same logic as main app)
-  derivatives_dir <- file.path(bids_dir, "derivatives")
+  # Create config directory if it doesn't exist
+  if (!dir.exists(config_dir)) {
+    dir.create(config_dir, recursive = TRUE)
+    cat("Created config directory:", config_dir, "\n")
+  }
   
   # Normalize paths
-  bids_dir <- normalizePath(bids_dir, mustWork = FALSE)
+  if (!is.null(bids_dir)) {
+    bids_dir <- normalizePath(bids_dir, mustWork = FALSE)
+  }
   derivatives_dir <- normalizePath(derivatives_dir, mustWork = FALSE)
-  output_dir <- normalizePath(output_dir, mustWork = FALSE)
+  config_dir <- normalizePath(config_dir, mustWork = FALSE)
   
   # Create derivatives directory if it doesn't exist
   if (!dir.exists(derivatives_dir)) {
@@ -222,12 +242,14 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
   
   # Print configuration
   cat("Starting Region Definition App with configuration:\n")
-  cat("  BIDS directory:", bids_dir, "\n")
+  if (!is.null(bids_dir)) {
+    cat("  BIDS directory:", bids_dir, "\n")
+  }
   cat("  Derivatives directory:", derivatives_dir, "\n")
-  cat("  Output directory:", output_dir, "\n")
+  cat("  Config directory:", config_dir, "\n")
   
   # Initialize kinfitr_regions.tsv file
-  regions_file <- file.path(output_dir, "kinfitr_regions.tsv")
+  regions_file <- file.path(config_dir, "kinfitr_regions.tsv")
   file_was_empty <- FALSE
   
   if (!file.exists(regions_file)) {
@@ -611,9 +633,11 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
           tacs_parts <- stringr::str_split(input$selected_tacs, ": ", n = 2)[[1]]
           description_part <- if(length(tacs_parts) > 1) tacs_parts[2] else ""
           
-          # Find _tacs.tsv files in this directory that match the description
+          # Find _tacs.tsv files in this directory that match the description (excluding combined files)
           tacs_files <- list.files(first_path, pattern = "*_tacs\\.tsv$", 
                                   recursive = TRUE, full.names = TRUE)
+          # Exclude combined TACs files
+          tacs_files <- tacs_files[!grepl("desc-combined_tacs\\.tsv$", tacs_files)]
           
           # Filter to find the file that matches the selected description
           matching_tacs_file <- NULL
@@ -1039,9 +1063,72 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
     
     # Generate Combined TACs
     observeEvent(input$generate_tacs, {
-      # TODO: Add combined TACs generation functionality
-      showNotification("Generate Combined TACs functionality will be implemented soon!", 
-                      type = "message", duration = 3)
+      # Check if there are defined regions
+      current_data <- defined_regions_data()
+      if (is.null(current_data) || nrow(current_data) == 0) {
+        showNotification("No regions defined. Please add regions first.", 
+                        type = "warning", duration = 5)
+        return()
+      }
+      
+      tryCatch({
+        # Show processing notification that stays visible during processing
+        processing_id <- showNotification(HTML("Generating combined TACs.<br>Please wait..."), 
+                        type = "message", duration = NULL, id = "processing_tacs")
+        
+        # Step 1: Create file mapping
+        kinfitr_regions_file <- regions_file
+        derivatives_folder <- normalizePath(derivatives_dir, mustWork = FALSE)
+        
+        cat("Creating file mapping...\n")
+        regions_files_data <- create_kinfitr_regions_files(kinfitr_regions_file, derivatives_folder)
+        
+        # Step 2: Process all regions
+        kinfitr_regions_files_path <- file.path(config_dir, "kinfitr_regions_files.tsv")
+        combined_output_folder <- file.path(derivatives_dir, kinfitr_output_foldername)
+        
+        cat("Processing all regions...\n")
+        
+        # Use consolidated TACs creation instead of separate files
+        combined_data <- create_kinfitr_combined_tacs(kinfitr_regions_files_path, derivatives_folder, combined_output_folder)
+        
+        # Show success notification with summary  
+        total_rows <- nrow(combined_data)
+        total_regions <- length(unique(combined_data$region))
+        total_subjects <- length(unique(combined_data$sub))
+        
+        success_msg <- paste0(
+          "Successfully created consolidated TACs file. ",
+          "Total rows: ", total_rows, ", ",
+          "Regions: ", total_regions, ", ",
+          "Subjects: ", total_subjects, ". ",
+          "Output: desc-combined_tacs.tsv in ", combined_output_folder
+        )
+        
+        showNotification(success_msg, type = "message", duration = 5)
+        
+        cat("=== Combined TACs Generation Complete ===\n")
+        cat("Total rows:", total_rows, "\n")
+        cat("Total regions:", total_regions, "\n")
+        cat("Subjects processed:", total_subjects, "\n")
+        cat("Output folder:", combined_output_folder, "\n")
+        
+        # Remove processing notification and show success
+        removeNotification("processing_tacs")
+        
+        # Close app after 5 seconds to allow user to see success message
+        later::later(function() {
+          shiny::stopApp()
+        }, delay = 5)
+        
+      }, error = function(e) {
+        # Remove processing notification on error
+        removeNotification("processing_tacs")
+        
+        error_msg <- paste("Error generating combined TACs:", e$message)
+        showNotification(error_msg, type = "error", duration = 10)
+        cat("Error:", e$message, "\n")
+      })
     })
   }
   

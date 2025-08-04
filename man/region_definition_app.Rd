@@ -4,13 +4,26 @@
 \alias{region_definition_app}
 \title{Region Definition App}
 \usage{
-region_definition_app(bids_dir = ".", output_dir = NULL)
+region_definition_app(
+  bids_dir = NULL,
+  derivatives_dir = NULL,
+  kinfitr_output_foldername = "kinfitr"
+)
 }
 \arguments{
-\item{bids_dir}{Character string path to the BIDS directory}
+\item{bids_dir}{Character string path to the BIDS directory (default: NULL)}
 
-\item{output_dir}{Character string path for output (default: bids_dir/code/kinfitr)}
+\item{derivatives_dir}{Character string path to derivatives directory (default: bids_dir/derivatives if bids_dir provided)}
+
+\item{kinfitr_output_foldername}{Character string name for kinfitr output folder within derivatives (default: "kinfitr")}
 }
 \description{
 Launch a separate Shiny app for defining brain regions
+}
+\details{
+Config files (kinfitr_regions.tsv) are saved to:
+\itemize{
+\item bids_dir/code/kinfitr if bids_dir provided
+\item derivatives_dir/kinfitr_output_foldername if no bids_dir
+}
 }
