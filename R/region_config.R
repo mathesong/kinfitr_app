@@ -282,6 +282,9 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
                      selected = NULL),
           br(),
           actionButton("load_tacs", "Load Selected Regions", class = "btn-primary"),
+          br(), br(),
+          actionButton("add_all_regions", "Add All Regions from TACs File", 
+                      class = "btn-info"),
           br(), br()
         ),
         
@@ -305,9 +308,6 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
         actionButton("add_region", "Add Region", 
                     class = "btn-success"),
         br(), br(),
-        actionButton("add_all_regions", "Add All Regions", 
-                    class = "btn-info"),
-        br(), br(),
         actionButton("remove_region", "Remove Region", 
                     class = "btn-danger"),
         br(), br(), br(), br(),
@@ -315,8 +315,8 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
                     class = "btn-danger", style = "background-color: #8B0000; border-color: #8B0000;"),
         
         hr(),
-        actionButton("close_app", "Close App", 
-                    class = "btn-secondary"),
+        actionButton("generate_tacs", HTML("&#9654; Generate Combined TACs"), 
+                    class = "btn-success", style = "font-weight: bold;"),
         
         conditionalPanel(
           condition = "input.load_tacs > 0",
@@ -334,6 +334,19 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
                      condition = "output.has_morph_data",
                      h4("Available Regions"),
                      p("Select regions with non-zero volume:"),
+                     br(),
+                     div(
+                       div(style = "margin-bottom: 10px;", 
+                           strong("Filter regions by name:")),
+                       div(class = "input-group",
+                           tags$input(id = "region_filter", type = "text", class = "form-control",
+                                     placeholder = "e.g., Caudate", value = ""),
+                           div(class = "input-group-append",
+                               actionButton("apply_filter", "Filter", 
+                                          class = "btn btn-primary btn-sm"))
+                       )
+                     ),
+                     br(),
                      uiOutput("region_checkboxes")
                    ),
                    conditionalPanel(
@@ -363,6 +376,7 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
     
     # Track if file was originally empty
     originally_empty <- reactiveVal(file_was_empty)
+    
     
     # Load defined regions on startup
     observe({
@@ -410,22 +424,131 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
     
     # Generate checkboxes for regions
     output$region_checkboxes <- renderUI({
-      morph_df <- morph_data()
-      if (is.null(morph_df) || nrow(morph_df) == 0) {
+      full_morph_df <- morph_data()
+      filtered_morph_df <- filtered_morph_data()
+      
+      if (is.null(full_morph_df) || nrow(full_morph_df) == 0) {
         return(NULL)
       }
       
-      # Create checkboxes for each region
-      checkbox_list <- lapply(1:nrow(morph_df), function(i) {
-        region_name <- morph_df$name[i]
+      # Get currently selected regions from all data
+      selected_region_names <- c()
+      for (i in 1:nrow(full_morph_df)) {
+        checkbox_id <- paste0("region_", i)
+        if (!is.null(input[[checkbox_id]]) && input[[checkbox_id]]) {
+          selected_region_names <- c(selected_region_names, full_morph_df$name[i])
+        }
+      }
+      
+      if (is.null(filtered_morph_df) || nrow(filtered_morph_df) == 0) {
+        if (!is.null(input$region_filter) && input$region_filter != "") {
+          if (length(selected_region_names) > 0) {
+            # Show only selected regions when filter doesn't match anything new
+            selected_checkboxes <- lapply(selected_region_names, function(region_name) {
+              # Find the original index in full data
+              orig_idx <- which(full_morph_df$name == region_name)
+              checkbox_id <- paste0("region_", orig_idx)
+              checkboxInput(
+                inputId = checkbox_id,
+                label = region_name,
+                value = TRUE
+              )
+            })
+            
+            return(tagList(
+              div(class = "alert alert-info", 
+                  "No new regions match the filter '", input$region_filter, "'"),
+              hr(),
+              div(style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px;",
+                  h5("Currently Selected Regions:"),
+                  do.call(tagList, selected_checkboxes))
+            ))
+          } else {
+            return(div(class = "alert alert-info", 
+                      "No regions match the filter '", input$region_filter, "'"))
+          }
+        }
+        return(NULL)
+      }
+      
+      # Separate filtered regions into unselected and selected
+      filtered_names <- filtered_morph_df$name
+      unselected_filtered_names <- setdiff(filtered_names, selected_region_names)
+      
+      # Count only unselected filtered regions for "Select all" button
+      unselected_count <- length(unselected_filtered_names)
+      
+      # Create select all checkbox (only for unselected filtered regions)
+      select_all_checkbox <- if (unselected_count > 0) {
         checkboxInput(
-          inputId = paste0("region_", i),
-          label = region_name,
+          inputId = "select_all_visible",
+          label = paste0("Select all visible (", unselected_count, " unselected regions)"),
           value = FALSE
         )
-      })
+      } else {
+        div(class = "alert alert-success", "All visible regions are already selected!")
+      }
       
-      do.call(tagList, checkbox_list)
+      # Create checkboxes for UNSELECTED filtered regions only
+      unselected_filtered_checkboxes <- if (length(unselected_filtered_names) > 0) {
+        lapply(unselected_filtered_names, function(region_name) {
+          # Find original index in full data
+          orig_idx <- which(full_morph_df$name == region_name)
+          checkbox_id <- paste0("region_", orig_idx)
+          checkboxInput(
+            inputId = checkbox_id,
+            label = region_name,
+            value = FALSE
+          )
+        })
+      } else {
+        NULL
+      }
+      
+      # Create checkboxes for ALL selected regions (matching filter or not)
+      selected_checkboxes <- if (length(selected_region_names) > 0) {
+        lapply(selected_region_names, function(region_name) {
+          # Find original index in full data
+          orig_idx <- which(full_morph_df$name == region_name)
+          checkbox_id <- paste0("region_", orig_idx)
+          checkboxInput(
+            inputId = checkbox_id,
+            label = region_name,
+            value = TRUE
+          )
+        })
+      } else {
+        NULL
+      }
+      
+      # Build the result
+      result_list <- list()
+      
+      # Add select all section
+      result_list <- append(result_list, list(
+        div(style = "border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px;",
+            select_all_checkbox)
+      ))
+      
+      # Add unselected filtered regions if they exist
+      if (!is.null(unselected_filtered_checkboxes)) {
+        result_list <- append(result_list, list(
+          h5("Available Regions (matching filter):"),
+          do.call(tagList, unselected_filtered_checkboxes)
+        ))
+      }
+      
+      # Add selected regions section if they exist
+      if (!is.null(selected_checkboxes)) {
+        result_list <- append(result_list, list(
+          hr(),
+          div(style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px;",
+              h5(paste0("Selected Regions (", length(selected_region_names), " total):")),
+              do.call(tagList, selected_checkboxes))
+        ))
+      }
+      
+      do.call(tagList, result_list)
     })
     
     # Update TACs file choices
@@ -437,11 +560,33 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
       }
     })
     
+    # Handle filter button click
+    observeEvent(input$apply_filter, {
+      full_morph_df <- morph_data()
+      if (is.null(full_morph_df) || nrow(full_morph_df) == 0) {
+        return()
+      }
+      
+      if (is.null(input$region_filter) || input$region_filter == "") {
+        # No filter - show all regions
+        filtered_morph_data(full_morph_df)
+      } else {
+        # Apply filter
+        filtered_df <- full_morph_df %>%
+          dplyr::filter(stringr::str_detect(stringr::str_to_lower(name), 
+                                           stringr::str_to_lower(input$region_filter)))
+        filtered_morph_data(filtered_df)
+      }
+    })
+    
     # Reactive to store loaded TACs data
     loaded_tacs_data <- reactiveVal(NULL)
     
     # Reactive to store morph data
     morph_data <- reactiveVal(NULL)
+    
+    # Reactive value to store filtered morph data (updated manually via button)
+    filtered_morph_data <- reactiveVal(NULL)
     
     # Load selected TACs file
     observeEvent(input$load_tacs, {
@@ -501,22 +646,27 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
                     dplyr::arrange(name)
                   
                   morph_data(filtered_morph)
+                  filtered_morph_data(filtered_morph)  # Initialize filtered data with all data
                   cat("Loaded", nrow(filtered_morph), "regions with non-zero volume from:", morph_file, "\n")
                 } else {
                   cat("Warning: Expected columns 'name' and 'volume.mm3' not found in morph file\n")
                   morph_data(NULL)
+                  filtered_morph_data(NULL)
                 }
               }, error = function(e) {
                 cat("Error reading morph file:", e$message, "\n")
                 morph_data(NULL)
+                filtered_morph_data(NULL)
               })
             } else {
               cat("Morph file not found:", morph_file, "\n")
               morph_data(NULL)
+              filtered_morph_data(NULL)
             }
           } else {
             cat("No matching TACs file found for description:", description_part, "\n")
             morph_data(NULL)
+            filtered_morph_data(NULL)
           }
         }
         
@@ -615,18 +765,18 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
     
     # Add region
     observeEvent(input$add_region, {
-      # Get selected checkboxes first to check if only one is selected
-      morph_df <- morph_data()
-      if (is.null(morph_df) || nrow(morph_df) == 0) {
+      # Get selected checkboxes from ALL regions (both filtered and previously selected)
+      full_morph_df <- morph_data()
+      if (is.null(full_morph_df) || nrow(full_morph_df) == 0) {
         showNotification("No regions available to add", type = "warning")
         return()
       }
       
       selected_regions <- c()
-      for (i in 1:nrow(morph_df)) {
+      for (i in 1:nrow(full_morph_df)) {
         checkbox_id <- paste0("region_", i)
         if (!is.null(input[[checkbox_id]]) && input[[checkbox_id]]) {
-          selected_regions <- c(selected_regions, morph_df$name[i])
+          selected_regions <- c(selected_regions, full_morph_df$name[i])
         }
       }
       
@@ -699,8 +849,8 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
       duplicate_error(FALSE)
       multiple_regions_error(FALSE)
       
-      # Clear checkboxes
-      for (i in 1:nrow(morph_df)) {
+      # Clear all checkboxes (both filtered and previously selected)
+      for (i in 1:nrow(full_morph_df)) {
         checkbox_id <- paste0("region_", i)
         updateCheckboxInput(session, checkbox_id, value = FALSE)
       }
@@ -715,7 +865,7 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
         return()
       }
       
-      morph_df <- morph_data()
+      morph_df <- morph_data()  # Use full data, not filtered
       if (is.null(morph_df) || nrow(morph_df) == 0) {
         showNotification("No regions available to add", type = "warning")
         return()
@@ -826,9 +976,72 @@ region_definition_app <- function(bids_dir = ".", output_dir = NULL) {
       showNotification(paste("Removed all", total_rows, "region definitions"), type = "message")
     })
     
-    # Close app
-    observeEvent(input$close_app, {
-      stopApp()
+    # Handle select all visible checkbox
+    observeEvent(input$select_all_visible, {
+      filtered_morph_df <- filtered_morph_data()
+      full_morph_df <- morph_data()
+      
+      if (is.null(filtered_morph_df) || nrow(filtered_morph_df) == 0 || 
+          is.null(full_morph_df) || nrow(full_morph_df) == 0) {
+        return()
+      }
+      
+      # Get currently selected regions
+      selected_region_names <- c()
+      for (i in 1:nrow(full_morph_df)) {
+        checkbox_id <- paste0("region_", i)
+        if (!is.null(input[[checkbox_id]]) && input[[checkbox_id]]) {
+          selected_region_names <- c(selected_region_names, full_morph_df$name[i])
+        }
+      }
+      
+      # Get unselected filtered regions
+      filtered_names <- filtered_morph_df$name
+      unselected_filtered_names <- setdiff(filtered_names, selected_region_names)
+      
+      # Update only the UNSELECTED filtered region checkboxes
+      for (region_name in unselected_filtered_names) {
+        orig_idx <- which(full_morph_df$name == region_name)
+        checkbox_id <- paste0("region_", orig_idx)
+        updateCheckboxInput(session, checkbox_id, value = input$select_all_visible)
+      }
+    })
+    
+    # Update select all checkbox based on individual selections
+    observe({
+      filtered_morph_df <- filtered_morph_data()
+      full_morph_df <- morph_data()
+      
+      if (is.null(filtered_morph_df) || nrow(filtered_morph_df) == 0 || 
+          is.null(full_morph_df) || nrow(full_morph_df) == 0) {
+        return()
+      }
+      
+      # Get currently selected regions
+      selected_region_names <- c()
+      for (i in 1:nrow(full_morph_df)) {
+        checkbox_id <- paste0("region_", i)
+        if (!is.null(input[[checkbox_id]]) && input[[checkbox_id]]) {
+          selected_region_names <- c(selected_region_names, full_morph_df$name[i])
+        }
+      }
+      
+      # Get unselected filtered regions
+      filtered_names <- filtered_morph_df$name
+      unselected_filtered_names <- setdiff(filtered_names, selected_region_names)
+      
+      # Update select all checkbox state (should be checked only if no unselected filtered regions remain)
+      all_unselected_filtered_selected <- length(unselected_filtered_names) == 0
+      if (!is.null(input$select_all_visible) && input$select_all_visible != all_unselected_filtered_selected) {
+        updateCheckboxInput(session, "select_all_visible", value = all_unselected_filtered_selected)
+      }
+    })
+    
+    # Generate Combined TACs
+    observeEvent(input$generate_tacs, {
+      # TODO: Add combined TACs generation functionality
+      showNotification("Generate Combined TACs functionality will be implemented soon!", 
+                      type = "message", duration = 3)
     })
   }
   
