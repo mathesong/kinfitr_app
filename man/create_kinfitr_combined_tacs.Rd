@@ -2,12 +2,14 @@
 % Please edit documentation in R/region_utils.R
 \name{create_kinfitr_combined_tacs}
 \alias{create_kinfitr_combined_tacs}
-\title{Create Consolidated Kinfitr Combined TACs Output}
+\title{Create Consolidated kinfitr Combined TACs Output}
 \usage{
 create_kinfitr_combined_tacs(
   kinfitr_regions_files_path,
   derivatives_folder,
-  output_dir
+  output_dir,
+  bids_dir = NULL,
+  participant_data = NULL
 )
 }
 \arguments{
@@ -16,6 +18,10 @@ create_kinfitr_combined_tacs(
 \item{derivatives_folder}{Base path to derivatives folder}
 
 \item{output_dir}{Where to save consolidated combined TACs file}
+
+\item{bids_dir}{Path to BIDS directory (optional, for participant data and PET metadata)}
+
+\item{participant_data}{Participant data loaded from BIDS directory (optional)}
 }
 \value{
 Tibble with all combined TACs data in long format with BIDS attributes

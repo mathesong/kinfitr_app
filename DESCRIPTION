@@ -1,5 +1,5 @@
 Package: kinfitrapp
-Title: Kinfitr BIDS App Configuration Interface
+Title: kinfitr BIDS App Configuration Interface
 Version: 0.1.0
 Authors@R: 
     person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
@@ -24,7 +24,8 @@ Imports:
     tidyr,
     utils,
     magrittr,
-    later
+    later,
+    readr
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

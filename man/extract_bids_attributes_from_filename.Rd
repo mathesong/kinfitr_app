@@ -10,7 +10,7 @@ extract_bids_attributes_from_filename(filename)
 \item{filename}{Filename to parse (can be full path or basename)}
 }
 \value{
-Tibble with BIDS attributes (sub, ses, rec, task, run, desc, pet)
+Tibble with BIDS attributes (sub, ses, trc, rec, task, run, desc, pet)
 }
 \description{
 Extract BIDS key-value pairs from filename following bloodstream pattern

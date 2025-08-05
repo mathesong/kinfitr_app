@@ -1,190 +1,3 @@
-#' Find Folders Containing TACs Files
-#'
-#' @description Identifies directories that contain *_tacs.tsv files
-#'
-#' @param derivatives_folder Character string path to the derivatives folder
-#' @return Character vector of directory paths containing *_tacs.tsv files
-#' @export
-find_tacs_folders <- function(derivatives_folder) {
-  
-  # Find all subdirectories in the derivatives folder
-  subdirs <- list.dirs(derivatives_folder, recursive = FALSE, full.names = TRUE)
-  
-  # Function to check if a directory contains *_tacs.tsv files (excluding combined files)
-  has_tacs_files <- function(dir_path) {
-    tacs_files <- list.files(dir_path, pattern = "*_tacs\\.tsv$", recursive = TRUE)
-    # Exclude combined TACs files
-    tacs_files <- tacs_files[!grepl("desc-combined_tacs\\.tsv$", tacs_files)]
-    return(length(tacs_files) > 0)
-  }
-  
-  # Filter directories that contain *_tacs.tsv files
-  valid_dirs <- subdirs[purrr::map_lgl(subdirs, has_tacs_files)]
-  
-  if (length(valid_dirs) == 0) {
-    stop("No directories with *_tacs.tsv files found in ", derivatives_folder)
-  }
-  
-  return(valid_dirs)
-}
-
-#' Summarise TACs File Descriptions
-#'
-#' @description Process and summarize TACs files descriptions
-#'
-#' @param dir_path Character string path to directory containing *_tacs.tsv files
-#' @return Data frame with region configurations from the directory
-#' @export
-summarise_tacs_descriptions <- function(dir_path) {
-  
-  # Get all *_tacs.tsv files in this directory (excluding combined files)
-  tacs_files <- list.files(dir_path, pattern = "*_tacs\\.tsv$", 
-                          recursive = TRUE, full.names = TRUE)
-  # Exclude combined TACs files
-  tacs_files <- tacs_files[!grepl("desc-combined_tacs\\.tsv$", tacs_files)]
-  
-  if (length(tacs_files) == 0) {
-    return(NULL)
-  }
-
-  parsed_files <- kinfitr::bids_parse_files(dir_path)
-  
-  # Unnest the filedata
-  unnested_tacfiledata <- parsed_files %>%
-    dplyr::select(filedata) %>% 
-    tidyr::unnest(filedata) %>% 
-    dplyr::filter(measurement=="tacs") %>% 
-    dplyr::select(-path_absolute, -path, -extension,
-                  -measurement) %>% 
-    dplyr::distinct()
-  
-  create_bids_key_value_pairs(unnested_tacfiledata,
-                              colnames(unnested_tacfiledata))
-  
-}
-
-create_tacs_list <- function(derivatives_folder) {
-  
-  tacs_folders <- tibble::tibble(
-    path = find_tacs_folders(derivatives_folder)) %>% 
-    dplyr::mutate(foldername = basename(path)) %>% 
-    dplyr::mutate(descriptions = purrr::map(path, summarise_tacs_descriptions)) %>% 
-    tidyr::unnest(descriptions) %>% 
-    dplyr::mutate(tacs_filedescription = paste0(foldername, ": ", description))
-  
-  return(tacs_folders)
-}
-
-
-#' Create Kinfitr Regions Configuration
-#'
-#' @description Function to scan derivatives folders for *_tacs.tsv files and 
-#' generate region configuration file
-#'
-#' @param derivatives_folder Character string path to the derivatives folder
-#' @return Data frame with region configurations
-#' @export
-create_kinfitr_regions <- function(derivatives_folder) {
-  
-  # Find folders containing TACs files
-  valid_dirs <- find_tacs_folders(derivatives_folder)
-  
-  # Process all valid directories
-  all_regions <- purrr::map_dfr(valid_dirs, summarise_tacs_files)
-  
-  # Remove any duplicate combinations
-  unique_regions <- all_regions %>%
-    dplyr::distinct(region_name, derivatives_folder, description, name)
-  
-  # Write to kinfitr_regions.tsv
-  output_file <- file.path(derivatives_folder, "kinfitr_regions.tsv")
-  utils::write.table(unique_regions, output_file, sep = "\t", row.names = FALSE, quote = FALSE)
-  
-  cat("Created kinfitr_regions.tsv with", nrow(unique_regions), "region configurations\n")
-  cat("Output file:", output_file, "\n")
-  
-  return(unique_regions)
-}
-
-create_bids_key_value_pairs <- function(data, columns) {
-  data %>%
-    dplyr::mutate(
-      key_value_pairs = apply(
-        data[columns], 1,
-        function(row) {
-          # Create key-value pairs only for non-NA values
-          pairs <- paste(columns, row, sep = "-")
-          non_na_pairs <- pairs[!is.na(row)]
-          paste(non_na_pairs, collapse = "_")
-        }
-      )
-    ) %>% 
-    dplyr::select(description=key_value_pairs)
-}
-
-#' Interpret BIDS Key-Value Pairs
-#'
-#' @description Parse key-value pair strings back into tibble columns
-#'
-#' @param key_value_strings Character vector of key-value pair strings
-#' @return Tibble with parsed columns
-#' @export
-interpret_bids_key_value_pairs <- function(key_value_strings) {
-  
-  if (length(key_value_strings) == 0) {
-    return(tibble::tibble())
-  }
-  
-  # Parse each key-value string
-  parsed_list <- purrr::map(key_value_strings, function(kv_string) {
-    
-    if (is.na(kv_string) || kv_string == "") {
-      return(list())
-    }
-    
-    # Split by underscore to get individual pairs
-    pairs <- stringr::str_split(kv_string, "_")[[1]]
-    
-    # Parse each pair (format: "key-value")
-    result <- list()
-    for (pair in pairs) {
-      if (stringr::str_detect(pair, "-")) {
-        parts <- stringr::str_split(pair, "-", n = 2)[[1]]
-        if (length(parts) == 2) {
-          key <- parts[1]
-          value <- parts[2]
-          result[[key]] <- value
-        }
-      }
-    }
-    
-    return(result)
-  })
-  
-  # Get all unique column names
-  all_columns <- unique(unlist(purrr::map(parsed_list, names)))
-  
-  if (length(all_columns) == 0) {
-    return(tibble::tibble())
-  }
-  
-  # Create tibble with all columns
-  result_data <- purrr::map_dfc(all_columns, function(col) {
-    values <- purrr::map_chr(parsed_list, function(row) {
-      if (col %in% names(row)) {
-        return(row[[col]])
-      } else {
-        return(NA_character_)
-      }
-    })
-    
-    # Create a named list for this column
-    setNames(list(values), col)
-  })
-  
-  return(result_data)
-}
-
 #' Region Definition App
 #'
 #' @description Launch a separate Shiny app for defining brain regions
@@ -240,8 +53,20 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     cat("Created derivatives directory:", derivatives_dir, "\n")
   }
   
+  # Load participant data if BIDS directory is provided
+  participant_data <- NULL
+  if (!is.null(bids_dir)) {
+    participant_data <- load_participant_data(bids_dir)
+    if (!is.null(participant_data)) {
+      cat("Found participants.tsv with", nrow(participant_data$data), "participants\n")
+      if (!is.null(participant_data$metadata)) {
+        cat("Found participants.json with metadata for", length(participant_data$metadata), "columns\n")
+      }
+    }
+  }
+  
   # Print configuration
-  cat("Starting Region Definition App with configuration:\n")
+  cat("Starting Region Definition App:\n")
   if (!is.null(bids_dir)) {
     cat("  BIDS directory:", bids_dir, "\n")
   }
@@ -260,13 +85,12 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       description = character(0),
       ConstituentRegion = character(0)
     )
-    utils::write.table(empty_regions, regions_file, sep = "\t", 
-                      row.names = FALSE, quote = FALSE)
+    readr::write_tsv(empty_regions, regions_file)
     file_was_empty <- TRUE
     cat("Created empty kinfitr_regions.tsv file:", regions_file, "\n")
   } else {
     # Check if existing file is empty
-    existing_data <- utils::read.table(regions_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+    existing_data <- readr::read_tsv(regions_file, show_col_types = FALSE)
     file_was_empty <- nrow(existing_data) == 0
     cat("Found existing kinfitr_regions.tsv file:", regions_file, "\n")
   }
@@ -403,7 +227,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     # Load defined regions on startup
     observe({
       regions_data <- tryCatch({
-        utils::read.table(regions_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+        readr::read_tsv(regions_file, show_col_types = FALSE)
       }, error = function(e) {
         tibble::tibble(
           RegionName = character(0),
@@ -419,7 +243,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     session$onSessionEnded(function() {
       # Read file directly instead of using reactive
       current_data <- tryCatch({
-        utils::read.table(regions_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+        readr::read_tsv(regions_file, show_col_types = FALSE)
       }, error = function(e) {
         NULL
       })
@@ -637,7 +461,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
           tacs_files <- list.files(first_path, pattern = "*_tacs\\.tsv$", 
                                   recursive = TRUE, full.names = TRUE)
           # Exclude combined TACs files
-          tacs_files <- tacs_files[!grepl("desc-combined_tacs\\.tsv$", tacs_files)]
+          tacs_files <- tacs_files[!grepl("desc-combinedregions_tacs\\.tsv$", tacs_files)]
           
           # Filter to find the file that matches the selected description
           matching_tacs_file <- NULL
@@ -660,7 +484,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
             # Try to read the morph file
             if (file.exists(morph_file)) {
               tryCatch({
-                morph_df <- utils::read.table(morph_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+                morph_df <- readr::read_tsv(morph_file, show_col_types = FALSE)
                 
                 # Filter for non-zero volume-mm3 values
                 if ("volume.mm3" %in% colnames(morph_df) && "name" %in% colnames(morph_df)) {
@@ -859,8 +683,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       }
       
       # Save to file
-      utils::write.table(updated_data, regions_file, sep = "\t", 
-                        row.names = FALSE, quote = FALSE)
+      readr::write_tsv(updated_data, regions_file)
       
       # Update reactive value - this triggers reactive updates
       defined_regions_data(updated_data)
@@ -917,8 +740,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       }
       
       # Save to file
-      utils::write.table(updated_data, regions_file, sep = "\t", 
-                        row.names = FALSE, quote = FALSE)
+      readr::write_tsv(updated_data, regions_file)
       
       # Update reactive value - this triggers reactive updates
       defined_regions_data(updated_data)
@@ -956,8 +778,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       removed_count <- nrow(current_data) - nrow(updated_data)
       
       # Save to file
-      utils::write.table(updated_data, regions_file, sep = "\t", 
-                        row.names = FALSE, quote = FALSE)
+      readr::write_tsv(updated_data, regions_file)
       
       # Update reactive value
       defined_regions_data(updated_data)
@@ -988,8 +809,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       )
       
       # Save empty file
-      utils::write.table(empty_data, regions_file, sep = "\t", 
-                        row.names = FALSE, quote = FALSE)
+      readr::write_tsv(empty_data, regions_file)
       
       # Update reactive value
       defined_regions_data(empty_data)
@@ -1090,7 +910,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
         cat("Processing all regions...\n")
         
         # Use consolidated TACs creation instead of separate files
-        combined_data <- create_kinfitr_combined_tacs(kinfitr_regions_files_path, derivatives_folder, combined_output_folder)
+        combined_data <- create_kinfitr_combined_tacs(kinfitr_regions_files_path, derivatives_folder, combined_output_folder, bids_dir, participant_data)
         
         # Show success notification with summary  
         total_rows <- nrow(combined_data)
@@ -1102,7 +922,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
           "Total rows: ", total_rows, ", ",
           "Regions: ", total_regions, ", ",
           "Subjects: ", total_subjects, ". ",
-          "Output: desc-combined_tacs.tsv in ", combined_output_folder
+          "Output: desc-combinedregions_tacs.tsv in ", combined_output_folder
         )
         
         showNotification(success_msg, type = "message", duration = 5)

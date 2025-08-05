@@ -2,7 +2,7 @@
 % Please edit documentation in R/region_utils.R
 \name{create_kinfitr_regions_files}
 \alias{create_kinfitr_regions_files}
-\title{Create Kinfitr Regions Files Mapping}
+\title{Create kinfitr Regions Files Mapping}
 \usage{
 create_kinfitr_regions_files(kinfitr_regions_file, derivatives_folder)
 }

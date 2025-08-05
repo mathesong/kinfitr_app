@@ -4,7 +4,7 @@
 \name{kinfitrapp-package}
 \alias{kinfitrapp}
 \alias{kinfitrapp-package}
-\title{kinfitrapp: Kinfitr BIDS App Configuration Interface}
+\title{kinfitrapp: kinfitr BIDS App Configuration Interface}
 \description{
 A Shiny web application for creating customized kinfitr BIDS App configuration files for PET imaging analysis. Provides user interface for configuring kinetic modeling parameters for Time Activity Curves (TACs).
 }

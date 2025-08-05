@@ -2,7 +2,7 @@
 % Please edit documentation in R/region_utils.R
 \name{process_all_kinfitr_regions}
 \alias{process_all_kinfitr_regions}
-\title{Process All Kinfitr Regions Across All Files}
+\title{Process All kinfitr Regions Across All Files}
 \usage{
 process_all_kinfitr_regions(
   kinfitr_regions_files_path,

@@ -1,5 +1,5 @@
 ---
-title: "Kinfitr Model Report"
+title: "kinfitr Model Report"
 output: html_document
 params:
   config_file: NULL

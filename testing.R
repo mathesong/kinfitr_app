@@ -1,11 +1,17 @@
 roxygen2::roxygenise()
+devtools::document()
 devtools::load_all()
 
 bids_dir <- "/home/granville/Repositories/OpenNeuro/ds004869/"
 
+modelling_app(bids_dir)
+
+
+
+
 region_definition_app(bids_dir)
 
-run_app(bids_dir)
+
 
 # launch_kinfitr_app(
 #     bids_dir = "/path/to/bids",
