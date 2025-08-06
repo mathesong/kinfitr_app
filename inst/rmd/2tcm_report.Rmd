@@ -1,0 +1,171 @@
+---
+title: "2TCM Model Fitting Report"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: hide
+params:
+  model_number: "Model 1"
+  analysis_folder: NULL
+  model_results: NULL
+  tacs_files: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(jsonlite)
+theme_set(theme_light())
+
+# Load configuration from standard location
+config_path <- file.path(params$analysis_folder, "desc-kinfitroptions_config.json")
+config <- NULL
+if (file.exists(config_path)) {
+  tryCatch({
+    config <- jsonlite::fromJSON(config_path)
+    cat("Loaded config from:", config_path, "\n")
+  }, error = function(e) {
+    cat("Warning: Could not load config file:", e$message, "\n")
+  })
+} else {
+  cat("Config file not found at:", config_path, "\n")
+}
+```
+
+# `r params$model_number`: 2TCM Model Fitting Report
+
+This report summarises the Two Tissue Compartment Model (2TCM) fitting results for the kinfitr analysis pipeline.
+
+## Analysis Configuration
+
+**Model:** `r params$model_number` - 2TCM (Two Tissue Compartment Model)
+
+**Analysis folder:** `r params$analysis_folder`
+
+**Generated on:** `r format(Sys.time(), "%Y-%m-%d %H:%M:%S")`
+
+## Model Parameters
+
+The 2TCM model estimates the following parameters:
+
+- **K1**: Influx rate constant (mL/cm³/min)
+- **k2**: Efflux rate constant from tissue to plasma (1/min)
+- **k3**: Rate constant from non-displaceable to specifically bound compartment (1/min)
+- **k4**: Rate constant from specifically bound to non-displaceable compartment (1/min)
+- **vB**: Blood volume fraction (unitless)
+
+```{r model-config}
+# Extract model configuration for this specific model
+model_config <- NULL
+if (!is.null(config$Models)) {
+  if (params$model_number == "Model 1") {
+    model_config <- config$Models$Model1
+  } else if (params$model_number == "Model 2") {
+    model_config <- config$Models$Model2
+  } else if (params$model_number == "Model 3") {
+    model_config <- config$Models$Model3
+  }
+}
+
+if (!is.null(model_config) && model_config$type == "2TCM") {
+  cat("2TCM model configuration found and applied.")
+  # Display parameter bounds and starting values when available
+} else {
+  cat("2TCM model configuration not found or incomplete.")
+}
+```
+
+## Parameter Bounds and Starting Values
+
+```{r parameter-bounds}
+cat("Parameter bounds and starting values:")
+cat("\n- K1: start, lower, upper bounds")
+cat("\n- k2: start, lower, upper bounds")
+cat("\n- k3: start, lower, upper bounds") 
+cat("\n- k4: start, lower, upper bounds")
+cat("\n- vB: start, lower, upper bounds")
+cat("\n- vB fitting: enabled/disabled")
+```
+
+## Model Fitting Results
+
+```{r fitting-results}
+if (!is.null(params$model_results)) {
+  cat("2TCM model fitting completed successfully.")
+  # Add results summary table here
+} else {
+  cat("2TCM model fitting results not available.")
+  cat("\nModel fitting will produce:")
+  cat("\n- Parameter estimates for each region and subject")
+  cat("\n- Goodness of fit statistics")
+  cat("\n- Model residuals and diagnostics")
+}
+```
+
+## Parameter Estimates
+
+```{r parameter-estimates}
+cat("Parameter estimates will be displayed in tables showing:")
+cat("\n- K1, k2, k3, k4, vB values for each TAC")
+cat("\n- Parameter uncertainties (SE or CI)")
+cat("\n- Derived parameters (VT, BP_ND, K1/k2, etc.)")
+```
+
+## Derived Parameters
+
+```{r derived-parameters}
+cat("Key derived parameters from 2TCM:")
+cat("\n- VT = K1/k2 * (1 + k3/k4): Total volume of distribution")
+cat("\n- BP_ND = k3/k4: Non-displaceable binding potential")
+cat("\n- k2a = k2 + k3: Apparent k2")
+```
+
+## Model Fits Visualisation
+
+```{r model-fits, fig.height=8, fig.width=12}
+cat("Model fitting visualisation will include:")
+cat("\n- Measured vs. predicted TACs")
+cat("\n- Residuals plots") 
+cat("\n- Parameter correlation plots")
+cat("\n- Goodness of fit metrics")
+cat("\n- Compartmental model diagrams")
+```
+
+## Regional Parameter Summary
+
+```{r regional-summary}
+cat("Regional parameter summary will show:")
+cat("\n- Mean parameter values by region")
+cat("\n- Parameter variability across subjects")
+cat("\n- Regional differences in binding (BP_ND)")
+cat("\n- Distribution volume patterns (VT)")
+```
+
+## Quality Control
+
+```{r model-qc}
+cat("Model quality control checks:")
+cat("\n- Parameter estimates within physiological range")
+cat("\n- Successful convergence for all fits")
+cat("\n- Adequate goodness of fit (R², AIC)")
+cat("\n- k3/k4 ratio reasonable for binding")
+cat("\n- No parameter correlation issues")
+```
+
+## Next Steps
+
+After reviewing this report:
+
+1. **Verify parameter estimates**: Check that all rate constants are physiologically reasonable
+2. **Assess binding potential**: Evaluate BP_ND values for expected regional patterns
+3. **Compare with simpler models**: Consider if 2TCM complexity is justified vs. 1TCM
+4. **Review correlations**: Check for parameter identifiability issues
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```

@@ -1,0 +1,155 @@
+---
+title: "1TCM Model Fitting Report"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: hide
+params:
+  model_number: "Model 1"
+  analysis_folder: NULL
+  model_results: NULL
+  tacs_files: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(jsonlite)
+theme_set(theme_light())
+
+# Load configuration from standard location
+config_path <- file.path(params$analysis_folder, "desc-kinfitroptions_config.json")
+config <- NULL
+if (file.exists(config_path)) {
+  tryCatch({
+    config <- jsonlite::fromJSON(config_path)
+    cat("Loaded config from:", config_path, "\n")
+  }, error = function(e) {
+    cat("Warning: Could not load config file:", e$message, "\n")
+  })
+} else {
+  cat("Config file not found at:", config_path, "\n")
+}
+```
+
+# `r params$model_number`: 1TCM Model Fitting Report
+
+This report summarises the One Tissue Compartment Model (1TCM) fitting results for the kinfitr analysis pipeline.
+
+## Analysis Configuration
+
+**Model:** `r params$model_number` - 1TCM (One Tissue Compartment Model)
+
+**Analysis folder:** `r params$analysis_folder`
+
+**Generated on:** `r format(Sys.time(), "%Y-%m-%d %H:%M:%S")`
+
+## Model Parameters
+
+The 1TCM model estimates the following parameters:
+
+- **K1**: Influx rate constant (mL/cm³/min)
+- **k2**: Efflux rate constant (1/min)
+- **vB**: Blood volume fraction (unitless)
+
+```{r model-config}
+# Extract model configuration for this specific model
+model_config <- NULL
+if (!is.null(config$Models)) {
+  if (params$model_number == "Model 1") {
+    model_config <- config$Models$Model1
+  } else if (params$model_number == "Model 2") {
+    model_config <- config$Models$Model2
+  } else if (params$model_number == "Model 3") {
+    model_config <- config$Models$Model3
+  }
+}
+
+if (!is.null(model_config) && model_config$type == "1TCM") {
+  cat("1TCM model configuration found and applied.")
+  # Display parameter bounds and starting values when available
+} else {
+  cat("1TCM model configuration not found or incomplete.")
+}
+```
+
+## Parameter Bounds and Starting Values
+
+```{r parameter-bounds}
+cat("Parameter bounds and starting values:")
+cat("\n- K1: start, lower, upper bounds")
+cat("\n- k2: start, lower, upper bounds") 
+cat("\n- vB: start, lower, upper bounds")
+cat("\n- vB fitting: enabled/disabled")
+```
+
+## Model Fitting Results
+
+```{r fitting-results}
+if (!is.null(params$model_results)) {
+  cat("1TCM model fitting completed successfully.")
+  # Add results summary table here
+} else {
+  cat("1TCM model fitting results not available.")
+  cat("\nModel fitting will produce:")
+  cat("\n- Parameter estimates for each region and subject")
+  cat("\n- Goodness of fit statistics")
+  cat("\n- Model residuals and diagnostics")
+}
+```
+
+## Parameter Estimates
+
+```{r parameter-estimates}
+cat("Parameter estimates will be displayed in tables showing:")
+cat("\n- K1, k2, vB values for each TAC")
+cat("\n- Parameter uncertainties (SE or CI)")
+cat("\n- Derived parameters (VT, BP, etc.)")
+```
+
+## Model Fits Visualisation
+
+```{r model-fits, fig.height=8, fig.width=12}
+cat("Model fitting visualisation will include:")
+cat("\n- Measured vs. predicted TACs")
+cat("\n- Residuals plots")
+cat("\n- Parameter correlation plots")
+cat("\n- Goodness of fit metrics")
+```
+
+## Regional Parameter Summary
+
+```{r regional-summary}
+cat("Regional parameter summary will show:")
+cat("\n- Mean parameter values by region")
+cat("\n- Parameter variability across subjects")
+cat("\n- Regional differences in binding")
+```
+
+## Quality Control
+
+```{r model-qc}
+cat("Model quality control checks:")
+cat("\n- Parameter estimates within physiological range")
+cat("\n- Successful convergence for all fits")
+cat("\n- Adequate goodness of fit (R², AIC)")
+cat("\n- Reasonable residual patterns")
+```
+
+## Next Steps
+
+After reviewing this report:
+
+1. **Verify parameter estimates**: Check that K1, k2, vB values are physiologically reasonable
+2. **Assess model fits**: Ensure good agreement between measured and predicted TACs
+3. **Compare with other models**: Evaluate relative performance if multiple models fitted
+4. **Proceed with analysis**: Use parameter estimates for further calculations
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```

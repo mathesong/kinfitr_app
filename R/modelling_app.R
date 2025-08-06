@@ -133,19 +133,19 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
   ui <- fluidPage(theme = shinythemes::shinytheme("flatly"),
     
     # App title ----
-    titlePanel("Create a customised kinfitr BIDS App config file"),
+    titlePanel("Kinetic Modelling Configuration"),
     
     # Tab panel for all options ----
     tabsetPanel(type = "tabs",
                 # Tab panel for data definition ----
                 tabPanel("Data Definition",
                          br(),
-                         h4("Data Definition"),
+                         # h4("Data Definition"),
                          # p("Define and create the analysis dataset from the combined TACs file. This step allows you to subset the data and generate individual TACs files for your specific analysis.",
                          #   style = "font-size:14px;"
                          # ),
                          # br(),
-                         h5("Subsetting"),
+                         h3("Subsetting"),
                          p(glue::glue("Use these options to apply this analysis to a subset of the data. ",
                                 "Values should be separated by semi-colons (e.g., 01;02). ",
                                 "All measurements fulfilling all the conditions will ",
@@ -170,7 +170,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                          ),
                          
                          hr(),
-                         h5("Create Data"),
+                         h3("Create Data"),
                          p("Generate individual TACs files for each measurement and create a report plotting the selected data.",
                            style = "font-size:14px;"
                          ),
@@ -179,13 +179,135 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                 ),
                 # Tab panel for weights ----
                     tabPanel("Weights Definition",
-                             h4("Weights Definition"),
-                             p("Create weights for modelling"),
                              br(),
-                             h5("Content coming soon..."),
+                             h3("Region for Weights Calculation"),
+                             p("Select the region to use for calculating weights. Regional means are volume-weighted averages.",
+                               style = "font-size:14px;"
+                             ),
+                             br(),
+                             fluidRow(
+                               column(8,
+                                 div(style = "width: 100%;",
+                                   selectInput("weights_region_type", "Region Source:",
+                                             choices = c("Single region" = "single",
+                                                       "Mean of analysis regions" = "mean_combined", 
+                                                       "Mean of external segmentation" = "external"),
+                                             selected = "external",
+                                             width = "100%")
+                                 )
+                               ),
+                               column(4,
+                                 conditionalPanel(
+                                   condition = "input.weights_region_type == 'single'",
+                                   textInput("weights_region", "Region Name:",
+                                           value = "",
+                                           placeholder = "e.g., Caudate",
+                                           width = "100%")
+                                 ),
+                                 conditionalPanel(
+                                   condition = "input.weights_region_type == 'mean_combined'",
+                                   div(
+                                     p(strong("All analysis regions will be averaged"), style = "font-size:12px; color:#666;")
+                                   )
+                                 ),
+                                 conditionalPanel(
+                                   condition = "input.weights_region_type == 'external'",
+                                   selectInput("weights_external_tacs", "Select Segmentation:",
+                                             choices = c("Loading..." = ""),
+                                             selected = "",
+                                             width = "100%")
+                                 )
+                               )
+                             ),
                              
                              hr(),
-                             actionButton("run_weights", "▶ Run Weights Calculation", class = "btn-success btn-lg")
+                             h3("Radioisotope"),
+                             p("Select the radioisotope for decay correction. Half-life is used for time-based weighting methods.",
+                               style = "font-size:14px;"
+                             ),
+                             br(),
+                             fluidRow(
+                               column(8,
+                                 radioButtons("weights_radioisotope", "",
+                                            choices = c("C11 (20.4 min)" = "C11",
+                                                      "O15 (2.05 min)" = "O15", 
+                                                      "F18 (109.8 min)" = "F18",
+                                                      "Other (specify half-life)" = "Other"),
+                                            selected = "C11", inline = TRUE)
+                               ),
+                               column(4,
+                                 conditionalPanel(
+                                   condition = "input.weights_radioisotope == 'Other'",
+                                   numericInput("weights_halflife", "Half-life (minutes):",
+                                              value = 20.4, min = 0.1, max = 1000, step = 0.1)
+                                 )
+                               )
+                             ),
+                             
+                             hr(),
+                             h3("Weighting Method"),
+                             p("Choose the mathematical method for calculating frame weights.",
+                               style = "font-size:14px;"
+                             ),
+                             br(),
+                             fluidRow(
+                               column(8,
+                                 div(style = "width: 100%;",
+                                   selectInput("weights_method", "Method:",
+                                             choices = c("1. frame_dur / tac_uncor" = "1",
+                                                       "2. sqrt(frame_dur * tac_uncor) (default)" = "2",
+                                                       "3. sqrt(frame_dur) / tac" = "3", 
+                                                       "4. sqrt(frame_dur)" = "4",
+                                                       "5. frame_dur * exp(-ln(2)/halflife)" = "5",
+                                                       "6. frame_dur / tac" = "6",
+                                                       "7. frame_dur" = "7",
+                                                       "8. frame_dur^2 / tac_uncor" = "8",
+                                                       "9. (frame_dur^2 / (frame_dur * tac)) * corrections^2" = "9",
+                                                       "Custom formula" = "custom"),
+                                             selected = "2",
+                                             width = "100%")
+                                 )
+                               ),
+                               column(4,
+                                 numericInput("weights_minweight", "Minimum Weight:",
+                                            value = 0.25, min = 0.001, max = 1, step = 0.001)
+                               )
+                             ),
+                             
+                             conditionalPanel(
+                               condition = "input.weights_method == 'custom'",
+                               br(),
+                               div(
+                                 h4("Custom Formula"),
+                                 p("Define a custom weighting formula using available variables:",
+                                   style = "font-size:14px; margin-bottom:10px;"),
+                                 textAreaInput("weights_custom_formula", "",
+                                             value = "",
+                                             rows = 2,
+                                             placeholder = "e.g., (frame_dur^2) / tac_uncor")
+                               )
+                             ),
+                             
+                             br(),
+                             div(
+                               p(strong("Available variables:"), style = "font-size:13px; margin-bottom:5px;"),
+                               div(
+                                 p("• ", strong("frame_dur:"), " Frame duration in seconds", style = "font-size:11px; margin:2px 0;"),
+                                 p("• ", strong("frame_mid:"), " Frame midpoint time in seconds", style = "font-size:11px; margin:2px 0;"),
+                                 p("• ", strong("tac:"), " Time activity curve (decay-corrected)", style = "font-size:11px; margin:2px 0;"),
+                                 p("• ", strong("tac_uncor:"), " Time activity curve (decay-uncorrected)", style = "font-size:11px; margin:2px 0;"),
+                                 p("• ", strong("corrections:"), " Decay correction factors", style = "font-size:11px; margin:2px 0;"),
+                                 style = "background:#f8f9fa; padding:10px; border-left:3px solid #007bff; margin:10px 0;"
+                               )
+                             ),
+                             
+                             hr(),
+                             h3("Calculate Weights"),
+                             p("Calculate weights and generate a report plotting the selected data.",
+                               style = "font-size:14px;"
+                             ),
+                             br(),
+                             actionButton("run_weights", "▶ Calculate Weights", class = "btn-success btn-lg")
                     ),
                     # Tab panel for delay ----
                     tabPanel("Fit Delay",
@@ -467,7 +589,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                              hr(),
                              actionButton("run_interactive", "▶ Launch Interactive Mode", class = "btn-success btn-lg")
                     ),
-                    tabPanel("Configuration",
+                    tabPanel("Preview Configuration",
                              br(),
                              h4("Configuration Settings"),
                              p("Review and save your analysis configuration. The JSON below shows all current settings."),
@@ -506,8 +628,8 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
       existing_config <- load_existing_config()
       
       if (!is.null(existing_config)) {
-        # Show notification that config was loaded
-        showNotification(paste("Loaded previous configuration from", basename(output_dir)), 
+        # Show notification that config is being loaded
+        showNotification(paste("Loading previous configuration from", basename(output_dir)), 
                         type = "message", duration = 5)
         
         # Restore subsetting parameters
@@ -518,7 +640,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
           updateTextInput(session, "subset_trc", value = existing_config$Subsetting$trc %||% "")
           updateTextInput(session, "subset_rec", value = existing_config$Subsetting$rec %||% "")
           updateTextInput(session, "subset_run", value = existing_config$Subsetting$run %||% "")
-          updateTextInput(session, "subset_regions", value = existing_config$Subsetting$RegionNames %||% "")
+          updateTextInput(session, "subset_regions", value = existing_config$Subsetting$Regions %||% "")
         }
         
         # Restore Model 1 settings
@@ -535,7 +657,84 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         if (!is.null(existing_config$Models$Model3)) {
           updateSelectInput(session, "button3", selected = existing_config$Models$Model3$type %||% "1TCM")
         }
+        
+        # Restore Weights settings
+        if (!is.null(existing_config$Weights)) {
+          updateSelectInput(session, "weights_region_type", 
+                           selected = existing_config$Weights$region_type %||% "external")
+          updateTextInput(session, "weights_region", 
+                         value = existing_config$Weights$region %||% "")
+          updateSelectInput(session, "weights_external_tacs", 
+                           selected = existing_config$Weights$external_tacs %||% "")
+          updateRadioButtons(session, "weights_radioisotope", 
+                           selected = existing_config$Weights$radioisotope %||% "C11")
+          if (!is.null(existing_config$Weights$halflife)) {
+            updateNumericInput(session, "weights_halflife", 
+                             value = existing_config$Weights$halflife)
+          }
+          updateSelectInput(session, "weights_method", 
+                           selected = existing_config$Weights$method %||% "2")
+          # Handle both new 'formula' field and legacy 'custom_formula' field
+          custom_formula_value <- existing_config$Weights$formula %||% existing_config$Weights$custom_formula %||% ""
+          if (custom_formula_value != "" && existing_config$Weights$method == "custom") {
+            updateTextAreaInput(session, "weights_custom_formula", 
+                              value = custom_formula_value)
+          }
+          updateNumericInput(session, "weights_minweight", 
+                           value = existing_config$Weights$minweight %||% 0.25)
+        }
       }
+    })
+    
+    # Reactive function to populate external segmentation options from combined regions file ----
+    observe({
+      tryCatch({
+        # Read desc values from combined regions file (in kinfitr folder)
+        combined_regions_file <- file.path(kinfitr_dir, "desc-combinedregions_tacs.tsv")
+        
+        cat("Looking for combined regions file at:", combined_regions_file, "\n")
+        
+        if (file.exists(combined_regions_file)) {
+          cat("Combined regions file found, reading desc values...\n")
+          combined_regions <- readr::read_tsv(combined_regions_file, show_col_types = FALSE)
+          
+          if (nrow(combined_regions) > 0 && "desc" %in% colnames(combined_regions)) {
+            # Get unique desc values for segmentation options
+            unique_desc <- sort(unique(combined_regions$desc))
+            unique_desc <- unique_desc[!is.na(unique_desc)]
+            
+            cat("Found", length(unique_desc), "unique desc values:", paste(unique_desc, collapse = ", "), "\n")
+            
+            if (length(unique_desc) > 0) {
+              # Create choices for segmentation selection
+              choices <- setNames(unique_desc, unique_desc)
+              
+              updateSelectInput(session, "weights_external_tacs",
+                               choices = choices,
+                               selected = unique_desc[1])
+              
+              cat("Successfully updated external segmentation dropdown\n")
+            } else {
+              updateSelectInput(session, "weights_external_tacs",
+                               choices = c("No segmentations found" = ""),
+                               selected = "")
+            }
+          } else {
+            updateSelectInput(session, "weights_external_tacs",
+                             choices = c("No desc column found" = ""),
+                             selected = "")
+          }
+        } else {
+          updateSelectInput(session, "weights_external_tacs",
+                           choices = c("Combined regions file not found" = ""),
+                           selected = "")
+        }
+      }, error = function(e) {
+        # If there's an error, provide default choice
+        updateSelectInput(session, "weights_external_tacs",
+                         choices = c("Error loading segmentations" = ""),
+                         selected = "")
+      })
     })
     
     # Reactive expression to generate the config file ----
@@ -549,12 +748,40 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         trc = input$subset_trc,
         rec = input$subset_rec,
         run = input$subset_run,
-        RegionNames = input$subset_regions
+        Regions = input$subset_regions
       )
       
       # Weights Definition  
+      # Define method formulas mapping
+      method_formulas <- c(
+        "1" = "frame_dur / tac_uncor",
+        "2" = "sqrt(frame_dur * tac_uncor)",
+        "3" = "sqrt(frame_dur) / tac", 
+        "4" = "sqrt(frame_dur)",
+        "5" = "frame_dur * exp(-ln(2)/halflife)",
+        "6" = "frame_dur / tac",
+        "7" = "frame_dur",
+        "8" = "frame_dur^2 / tac_uncor",
+        "9" = "(frame_dur^2 / (frame_dur * tac)) * corrections^2"
+      )
+      
+      # Determine formula to store
+      selected_method <- input$weights_method %||% "2"
+      if (selected_method == "custom") {
+        weights_formula <- input$weights_custom_formula %||% ""
+      } else {
+        weights_formula <- method_formulas[selected_method] %||% ""
+      }
+      
       Weights <- list(
-        method = "Not configured"
+        region_type = input$weights_region_type %||% "external",
+        region = if(input$weights_region_type == "single") input$weights_region %||% "" else "",
+        external_tacs = if(input$weights_region_type == "external") input$weights_external_tacs %||% "" else "",
+        radioisotope = input$weights_radioisotope %||% "C11",
+        halflife = if(input$weights_radioisotope == "Other") as.character(input$weights_halflife %||% 20.4) else "",
+        method = selected_method,
+        formula = weights_formula,
+        minweight = input$weights_minweight %||% 0.25
       )
       
       # Fit Delay
@@ -584,7 +811,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         Models = Models
       )
       
-      jsonlite::toJSON(config_list, pretty=T)
+      jsonlite::toJSON(config_list, pretty = TRUE, auto_unbox = TRUE)
     })
     
     # Save config function
@@ -675,16 +902,8 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         # Create individual TACs files in analysis folder
         result <- create_individual_tacs_files(filtered_data, analysis_folder)
         
-        # Show success notification
-        success_msg <- paste0(
-          "Data subsetting completed successfully. ",
-          result$summary, " in analysis folder. ",
-          "Total measurements: ", nrow(filtered_data), ", ",
-          "Unique subjects: ", length(unique(filtered_data$sub)), ", ",
-          "Unique regions: ", length(unique(filtered_data$region))
-        )
-        
-        showNotification(success_msg, type = "message", duration = 5)
+        # Show generating report notification
+        showNotification("Generating report...", type = "message", duration = NULL, id = "generating_report")
         
         cat("=== Data Subsetting Complete ===\n")
         cat("Files created:", result$files_created, "\n")
@@ -692,6 +911,29 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         cat("Total measurements:", nrow(filtered_data), "\n")  
         cat("Unique subjects:", length(unique(filtered_data$sub)), "\n")
         cat("Unique regions:", length(unique(filtered_data$region)), "\n")
+        
+        # Generate data definition report
+        tryCatch({
+          report_file <- generate_step_report(
+            step_name = "data_definition",
+            analysis_folder = analysis_folder
+          )
+          
+          # Remove generating notification and show completion
+          removeNotification(id = "generating_report")
+          
+          if (!is.null(report_file)) {
+            showNotification("Data definition report generated successfully", type = "message", duration = 5)
+          } else {
+            showNotification("Report generation completed", type = "message", duration = 5)
+          }
+          
+        }, error = function(e) {
+          # Remove generating notification and show error
+          removeNotification(id = "generating_report")
+          showNotification("Error generating report", type = "error", duration = 5)
+          cat("Warning: Could not generate data definition report:", e$message, "\n")
+        })
         
       }, error = function(e) {
         error_msg <- paste("Error during data subsetting:", e$message)
@@ -701,33 +943,142 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
     })
     
     observeEvent(input$run_weights, {
+      # Check for combined regions TACs files first
+      tacs_files <- list.files(output_dir, 
+                              pattern = "*_desc-combinedregions_tacs.tsv", 
+                              recursive = TRUE)
+      
+      if (length(tacs_files) == 0) {
+        showNotification("No combined regions TACs files found. Please run Data Definition first to create individual TACs files.", 
+                        type = "error", duration = 8)
+        return()
+      }
+      
       save_config()
-      showNotification("Weights calculation completed", type = "message", duration = 3)
       # TODO: Add actual weights calculation logic
+      
+      # Generate weights report
+      showNotification("Generating weights report...", type = "message", duration = NULL, id = "generating_weights_report")
+      
+      tryCatch({
+        report_file <- generate_step_report(
+          step_name = "weights",
+          analysis_folder = output_dir
+        )
+        
+        removeNotification(id = "generating_weights_report")
+        
+        if (!is.null(report_file)) {
+          showNotification("Weights report generated", type = "message", duration = 3)
+        } else {
+          showNotification("Weights report generation failed - check console for details", type = "error", duration = 5)
+        }
+        
+      }, error = function(e) {
+        removeNotification(id = "generating_weights_report")
+        error_msg <- paste("Could not generate weights report:", e$message)
+        showNotification(error_msg, type = "error", duration = 8)
+        cat("Error generating weights report:", e$message, "\n")
+      })
     })
     
     observeEvent(input$run_delay, {
       save_config()
       showNotification("Delay estimation completed", type = "message", duration = 3)
       # TODO: Add actual delay estimation logic
+      
+      # Generate delay report
+      tryCatch({
+        report_file <- generate_step_report(
+          step_name = "delay",
+          analysis_folder = output_dir
+        )
+        
+        if (!is.null(report_file)) {
+          showNotification("Delay report generated", type = "message", duration = 3)
+        }
+        
+      }, error = function(e) {
+        cat("Warning: Could not generate delay report:", e$message, "\n")
+      })
     })
     
     observeEvent(input$run_model1, {
       save_config()
       showNotification("Model 1 fitting completed", type = "message", duration = 3)
       # TODO: Add actual model 1 fitting logic
+      
+      # Generate model 1 report
+      tryCatch({
+        model_type <- input$button %||% "1TCM"
+        
+        report_file <- generate_model_report(
+          model_type = model_type,
+          model_number = "Model 1",
+          analysis_folder = output_dir,
+          model_results = NULL,  # TODO: Add actual model results when implemented
+          tacs_files = NULL      # TODO: Add TACs files list when available
+        )
+        
+        if (!is.null(report_file)) {
+          showNotification(paste("Model 1 report generated (", model_type, ")"), type = "message", duration = 3)
+        }
+        
+      }, error = function(e) {
+        cat("Warning: Could not generate Model 1 report:", e$message, "\n")
+      })
     })
     
     observeEvent(input$run_model2, {
       save_config()
       showNotification("Model 2 fitting completed", type = "message", duration = 3)
       # TODO: Add actual model 2 fitting logic
+      
+      # Generate model 2 report
+      tryCatch({
+        model_type <- input$button2 %||% "1TCM"
+        
+        report_file <- generate_model_report(
+          model_type = model_type,
+          model_number = "Model 2",
+          analysis_folder = output_dir,
+          model_results = NULL,  # TODO: Add actual model results when implemented
+          tacs_files = NULL      # TODO: Add TACs files list when available
+        )
+        
+        if (!is.null(report_file)) {
+          showNotification(paste("Model 2 report generated (", model_type, ")"), type = "message", duration = 3)
+        }
+        
+      }, error = function(e) {
+        cat("Warning: Could not generate Model 2 report:", e$message, "\n")
+      })
     })
     
     observeEvent(input$run_model3, {
       save_config()
       showNotification("Model 3 fitting completed", type = "message", duration = 3)
       # TODO: Add actual model 3 fitting logic
+      
+      # Generate model 3 report
+      tryCatch({
+        model_type <- input$button3 %||% "1TCM"
+        
+        report_file <- generate_model_report(
+          model_type = model_type,
+          model_number = "Model 3",
+          analysis_folder = output_dir,
+          model_results = NULL,  # TODO: Add actual model results when implemented
+          tacs_files = NULL      # TODO: Add TACs files list when available
+        )
+        
+        if (!is.null(report_file)) {
+          showNotification(paste("Model 3 report generated (", model_type, ")"), type = "message", duration = 3)
+        }
+        
+      }, error = function(e) {
+        cat("Warning: Could not generate Model 3 report:", e$message, "\n")
+      })
     })
     
     observeEvent(input$run_interactive, {

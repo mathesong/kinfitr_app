@@ -46,7 +46,7 @@ docker-compose up
 ### Development
 - This is a proper R package with DESCRIPTION file and roxygen documentation
 - Two separate Shiny apps: `region_definition_app.R` and `modelling_app.R` in R/ directory
-- Parameterised reports are Rmd files located in templates/ folder
+- Parameterised reports are Rmd files located in inst/rmd/ folder (following R package convention)
 - Dependencies managed through DESCRIPTION file
 - Modular code structure with separate files for utilities, validation, and UI modules
 
@@ -56,7 +56,7 @@ docker-compose up
 - **Two-app system**: 
   - `region_definition_app.R`: For defining brain regions and creating combined TACs
   - `modelling_app.R`: For kinetic model configuration and analysis
-- **Package Structure**: Proper R package with R/, man/, data/, and templates/ directories
+- **Package Structure**: Proper R package with R/, man/, data/, and inst/rmd/ directories
 - **UI Layout**: Both apps use `fluidPage` with sidebar layout
 - **Server Logic**: Reactive expressions generate JSON configurations and process data
 - **Launcher Function**: `launch_apps()` can run either or both apps sequentially
@@ -74,12 +74,14 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
   - Contains all processed outputs and analysis results
   
 - **kinfitr folder**: `{derivatives_dir}/kinfitr/` - Contains shared kinfitr resources
-  - `desc-combinedregions_tacs.tsv`: Combined TACs file from region definition app
+  - `desc-combinedregions_tacs.tsv`: Combined TACs file from region definition app with seg_meanTAC column
+  - Contains volume-weighted mean TAC for entire segmentations (seg_meanTAC column)
   - Shared across all analyses and accessed by modelling app
   
 - **analysis folder**: `{derivatives_dir}/kinfitr/{subfolder}/` - Analysis-specific outputs
   - Individual TACs files created by modelling app subsetting
   - Configuration files for specific analyses (e.g., `desc-kinfitroptions_config.json`)
+  - **reports/** subfolder: Contains parameterised HTML reports for each analysis step
   - Default subfolder: "Primary_Analysis"
   - Each analysis gets its own subfolder to keep configurations separate
 
@@ -90,7 +92,10 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
 - `jsonlite`: JSON generation for config files
 - `kinfitr`: Core kinetic modeling functionality
 - `readr`: Robust file reading/writing (replaces base R read.table/write.table)
-- Data manipulation: `dplyr`, `tibble`, `purrr`, `stringr`, `tidyr`
+- `rmarkdown`: Parameterised report generation
+- `knitr`: Dynamic document generation for reports
+- **Data manipulation**: `tidyverse` ecosystem (`dplyr`, `tibble`, `purrr`, `stringr`, `tidyr`) - preferred over base R equivalents
+- Plotting: `ggplot2` (for report visualizations)
 - Other utilities: `glue`, `magrittr`, `later`
 
 ### Core Functionality
@@ -104,7 +109,198 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
 8. **Config Generation**: Create JSON configuration files for downstream analysis
 9. **Interactive modelling:** Test model fits on individual TACs to validate specifications before full processing
 10. **State Persistence**: Automatically save and restore app configuration for seamless workflow continuation
+11. **Parameterised Reports**: Automatically generate HTML reports for each analysis step for quality control and review
+12. **Segmentation Mean TACs**: Pre-calculated volume-weighted mean TACs for external segmentations to avoid BIDS directory access during weights calculation
 
+### Parameterised Reports System
+
+The kinfitr app includes a comprehensive parameterised reporting system that automatically generates HTML reports for each analysis step. These reports are designed for quality control, data visualization, and workflow documentation.
+
+#### Report Structure
+- **Location**: Reports are generated in `{analysis_folder}/reports/`
+- **Format**: HTML documents with embedded plots and tables
+- **Template Source**: R Markdown templates in `inst/rmd/` folder
+- **Generation**: Automatic generation after each analysis step completion
+
+#### Available Report Templates
+
+**Step-Based Reports:**
+- `data_definition_report.Rmd` → `data_definition_report.html`
+- `weights_report.Rmd` → `weights_report.html`  
+- `delay_report.Rmd` → `delay_report.html`
+
+**Model-Specific Reports:**
+- `1tcm_report.Rmd` → Used for 1TCM model fitting
+- `2tcm_report.Rmd` → Used for 2TCM model fitting
+- `logan_report.Rmd` → Used for Logan analysis
+- `fit_delay_report.Rmd` → Used for delay-fitting models
+
+**Procedure Reports:**
+- `tstar_finder_report.Rmd` → `tstar_finder_report.html` (for future t* finder tab)
+
+#### Dynamic Template Selection
+
+The system uses **dynamic template selection** for model reports:
+- Template chosen based on user's model selection (`input$button`, `input$button2`, `input$button3`)
+- Output files always named consistently: `model1_report.html`, `model2_report.html`, `model3_report.html`
+- Same template can generate different numbered reports depending on user choices
+
+**Example**: If user selects "2TCM" for Model 1 and "Logan" for Model 2:
+- `2tcm_report.Rmd` generates `model1_report.html`
+- `logan_report.Rmd` generates `model2_report.html`
+
+#### Report Generation Functions
+
+Located in `R/report_generation.R`:
+
+- `generate_step_report()`: Creates step-based reports (data definition, weights, delay)
+- `generate_model_report()`: Creates model-specific reports with dynamic template selection
+- `generate_tstar_report()`: Creates t* finder analysis reports
+- `get_model_template()`: Maps model types to appropriate template files
+- `generate_reports_summary()`: Creates summary page linking all generated reports
+
+#### Integration with Shiny App
+
+Reports are automatically generated by button handlers in `modelling_app.R`:
+- **Data Definition**: Generated after "Create Analysis Data" button execution
+- **Weights/Delay**: Generated after respective button executions  
+- **Model Reports**: Generated after "Fit Model X" button executions
+- **User Notifications**: Success messages inform users when reports are generated
+
+#### Report Content and Purpose
+
+**Primary Purpose**: Quality control and data visualization for user review
+
+**Standard Content**:
+- Analysis configuration summary
+- Data processing statistics  
+- Visualization plots (TACs, fits, diagnostics)
+- Quality control metrics
+- Parameter estimates and uncertainties
+- Next steps recommendations
+- Session information
+
+**Key Dependencies**: 
+- `rmarkdown`: Report rendering engine
+- `knitr`: Dynamic document generation
+- Standard plotting libraries (`ggplot2`, etc.)
+
+#### Interactive Plotly Reports
+
+The kinfitr system supports advanced interactive reports with plotly visualizations that provide rich, explorable data views.
+
+**IMPORTANT**: Reports are not just passive summaries - they perform the actual computational work. The R Markdown templates contain the core analysis logic for each step (weights calculation, delay fitting, model fitting, etc.), with users able to see exactly how calculations are performed. This design ensures complete transparency and reproducibility of all analysis steps.
+
+##### Technical Requirements and Dependencies
+
+**Core Interactive Libraries:**
+- `plotly`: Interactive plotting engine for web-based visualizations
+- `crosstalk`: Cross-widget interaction and filtering capabilities  
+- `htmltools`: HTML rendering and DOM manipulation for R Markdown
+
+**Critical Rendering Patterns:**
+```r
+# CORRECT: Use htmltools::tagList() for plotly object lists
+htmltools::tagList(plot_list)
+
+# WRONG: Direct printing fails in HTML output
+plot_list  # Results in [[1]], [[2]] instead of plots
+```
+
+##### Plotly Dimension and Spacing Control
+
+**Dimension Management:**
+```r
+# CORRECT: Set dimensions in plotly layout (overrides CSS)
+ggplotly(p) %>%
+  layout(
+    width = 800,
+    height = 500,
+    # other layout options...
+  )
+
+# WRONG: CSS dimensions are unreliable for plotly
+htmltools::div(plot, style="width: 800px; height: 500px;")  # May be ignored
+```
+
+**Spacing Between Plots:**
+```r
+# CORRECT: CSS margins for spacing between multiple plots
+htmltools::tagList(map(plots, ~htmltools::div(.x, style="margin: 20px 0 50px 0;")))
+
+# Spacing explanation:
+# - 20px top margin (separation from text above)
+# - 50px bottom margin (separation from next plot)  
+# - 0 left/right margins (centered alignment)
+```
+
+##### Interactive Plot Features
+
+**Standard Interactive Elements:**
+- **Cross-filtering**: Hover to highlight, double-click to reset using `crosstalk`
+- **Axis Scaling**: Dropdown menus for linear/log combinations on both axes
+- **Hover Tooltips**: Context-specific information via `tooltip` parameter
+- **SharedData**: Use `crosstalk::SharedData$new()` for cross-plot interactions
+
+**Example Interactive Pattern:**
+```r
+plots <- data %>% 
+  group_by(grouping_var) %>% 
+  nest() %>% 
+  mutate(
+    plot = map2(grouping_var, data, ~{
+      shared_data <- SharedData$new(.y, ~identifier)
+      
+      p <- ggplot(shared_data, aes(...)) + geom_*()
+      
+      ggplotly(p) %>%
+        highlight(on = "plotly_hover", off = "plotly_doubleclick", opacityDim = 0.2) %>%
+        layout(width = 800, height = 500)
+    })
+  ) %>% 
+  pull(plot)
+
+htmltools::tagList(map(plots, ~htmltools::div(.x, style="margin: 20px 0 50px 0;")))
+```
+
+##### Advanced R Markdown Patterns
+
+**Conditional Chunk Evaluation:**
+```r
+# Dynamic chunk execution based on conditions
+```{r, eval=condition_variable, echo=condition_variable}
+# Code only runs when condition_variable is TRUE
+```
+
+**Dynamic Content Generation:**
+```r
+```{r, echo=FALSE}
+#| results: asis
+
+if(condition) {
+  str_glue("Dynamic text based on data characteristics")
+}
+```
+
+##### User Experience Best Practices
+
+**Progressive Notification System:**
+```r
+# CORRECT: Progressive feedback for long operations
+showNotification("Generating report...", duration = NULL, id = "generating_report")
+# ... perform work ...
+removeNotification(id = "generating_report")
+showNotification("Report generated successfully", duration = 5)
+
+# WRONG: Technical implementation details in notifications
+showNotification("Created 15 files in analysis folder", ...)  # Too technical
+```
+
+**Professional Report Presentation:**
+- **Table of Contents**: `toc: true, toc_depth: 2` in YAML header
+- **Code Folding**: `code_folding: hide` to show results while hiding implementation
+- **Timestamps**: `format(Sys.time(), "%Y-%m-%d %H:%M:%S")` for generation tracking
+- **Session Info**: `sessionInfo()` for complete reproducibility
 
 ### File Management
 - Generates config files: `desc-kinfitroptions_config.json` in analysis folder
@@ -141,9 +337,10 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
    - **Time series**: frame_start, frame_end, frame_dur, frame_mid, TAC (volume-weighted average)
 
 4. **Individual Analysis Files**:
-   **Exact column order**: `region, volume_mm3, InjectedRadioactivity, bodyweight, frame_start, frame_end, frame_dur, frame_mid, TAC`
+   **Exact column order**: `pet, region, volume_mm3, InjectedRadioactivity, bodyweight, frame_start, frame_end, frame_dur, frame_mid, TAC`
    
    - Created by "Create Analysis Data" button in modelling app
+   - **pet column first**: Essential for data tracking and analysis identification
    - Essential kinetic modeling metadata positioned after volume_mm3, before frame timing
    - Use `desc-combinedregions` naming convention (not `desc-combinedtacs`)
    - Filename pattern: `{pet_id}_desc-combinedregions_tacs.tsv`
@@ -165,6 +362,9 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
 - **Reading/Writing**: Use `jsonlite` functions as usual
   - `jsonlite::read_json()` and `jsonlite::write_json()`
   - `jsonlite::fromJSON()` and `jsonlite::toJSON()`
+- **Critical JSON Formatting**: Always use `auto_unbox = TRUE` when writing JSON configuration files
+  - Prevents single values from being wrapped in arrays: `"mean_combined"` instead of `["mean_combined"]`
+  - Essential for proper configuration loading and template processing
 
 **Example patterns:**
 ```r
@@ -178,6 +378,68 @@ jsonlite::write_json(config, output_path, pretty = TRUE, auto_unbox = TRUE)
 ```
 
 This ensures consistent, reliable file operations and prevents data type conversion issues with tabular data while maintaining proper JSON handling.
+
+### Weights System Architecture
+
+**External Segmentation Support**: The system now supports using volume-weighted mean TACs from entire segmentations for weights calculation through an optimized workflow:
+
+1. **Region Definition App**: 
+   - Calculates `seg_meanTAC` column during combined regions creation
+   - Volume-weighted mean across ALL regions within each segmentation (desc) 
+   - Added to `desc-combinedregions_tacs.tsv` as additional column
+
+2. **Modelling App**:
+   - Reads unique `desc` values from combined regions file to populate external segmentation dropdown
+   - Default weights region type is now "Mean of external segmentation" (optimal approach)
+   - Validates combined regions files exist before allowing weights calculation
+
+3. **Weights Report Template**:
+   - Uses pre-calculated `seg_meanTAC` for external segmentation weights
+   - No longer requires access to original BIDS directory during weights calculation
+   - Automatically saves individual weight files in BIDS structure alongside TACs files
+   - Generates `{pet_id}_desc-weights_weights.tsv` in same directories as corresponding TACs files
+
+**Configuration Management**: 
+- JSON config now stores actual formulas in `formula` field (replaces `custom_formula`)
+- For predefined methods: stores mathematical formula (e.g., "sqrt(frame_dur * tac_uncor)")
+- For custom methods: stores user-provided formula
+- Uses shorter variable names (`tac_uncor` instead of `tac_uncorrected`) for cleaner formulas
+
+### Coding Standards
+
+**IMPORTANT**: Follow tidyverse conventions throughout the codebase for consistency and maintainability.
+
+#### Data Manipulation Standards
+- **Use `tidyverse` over base R**: Import `library(tidyverse)` in reports and use tidyverse functions
+- **Data structures**: Use `tibble()` instead of `data.frame()`
+- **Functional programming**: Use `purrr` functions (`map()`, `walk()`, etc.) instead of `apply()` family
+- **String manipulation**: Use `stringr` functions (`str_detect()`, `str_replace()`, etc.) instead of base R
+- **Data transformation**: Use `dplyr` verbs (`mutate()`, `filter()`, `select()`, etc.)
+
+#### Examples of Preferred Patterns
+```r
+# PREFERRED (tidyverse)
+library(tidyverse)
+data_df <- tibble(
+  Parameter = names(config_section),
+  Value = map_chr(config_section, as.character)
+)
+
+# AVOID (base R)
+library(dplyr)
+library(ggplot2) 
+data_df <- data.frame(
+  Parameter = names(config_section),
+  Value = sapply(config_section, as.character)
+)
+```
+
+#### Report Template Standards
+- Always load `library(tidyverse)` instead of individual packages
+- Use `tibble()` for creating data frames in reports
+- Use `map_*()` functions for iteration instead of `sapply()` or `apply()`
+- **Use British English spelling**: "visualisation" not "visualization", "colour" not "color", "analyse" not "analyze", etc.
+- Maintain consistent code style across all templates
 
 ### Critical Implementation Details
 
@@ -233,6 +495,36 @@ if (!is.null(existing_config$NewFeature)) {
 
 This ensures users can seamlessly continue work with existing configurations even after app updates.
 
+#### JSON Configuration Best Practices
+**Critical Implementation Details for Weights and Other Configuration Sections**:
+
+1. **Conditional Field Management**: 
+   - Set unused conditional fields to empty strings (`""`) in JSON
+   - Convert empty strings to `NULL` in R templates/functions
+   - Prevents confusion where irrelevant fields show values from other options
+
+2. **Proper JSON Structure**:
+   ```r
+   # CORRECT: Conditional fields set appropriately
+   Weights <- list(
+     region_type = input$weights_region_type %||% "mean_combined",
+     region = if(input$weights_region_type == "single") input$weights_region %||% "" else "",
+     external_tacs = if(input$weights_region_type == "external") input$weights_external_tacs %||% "" else "",
+     radioisotope = input$weights_radioisotope %||% "C11",
+     halflife = if(input$weights_radioisotope == "Other") as.character(input$weights_halflife %||% 20.4) else "",
+     method = input$weights_method %||% "2",
+     custom_formula = if(input$weights_method == "custom") input$weights_custom_formula %||% "" else "",
+     minweight = input$weights_minweight %||% 0.25
+   )
+   ```
+
+3. **Template Processing**:
+   ```r
+   # CORRECT: Convert empty strings to NULL for function calls
+   halflife <- if(halflife_raw == "" || is.null(halflife_raw)) NULL else as.numeric(halflife_raw)
+   custom_formula <- if(custom_formula_raw == "" || is.null(custom_formula_raw)) NULL else custom_formula_raw
+   ```
+
 ### Model Types Supported
 - **1TCM**: Single tissue compartment model with K1, k2, vB parameters
 - **2TCM**: Two tissue compartment model with K1, k2, k3, k4, vB parameters  
@@ -277,3 +569,37 @@ This will eventually contain more models
 **Root Cause**: Column name mismatches preventing proper data joins/assignments
 
 **Solution**: Ensure consistent column naming throughout the pipeline - no automatic conversions
+
+### Report Generation Issues
+
+**Symptom**: Reports fail to generate or show warning messages
+
+**Common Causes and Solutions**:
+
+1. **Missing Template Files**:
+   - **Cause**: Report template not found in `inst/rmd/` folder
+   - **Solution**: Verify template files exist and are properly named
+   - **Check**: Use `system.file("rmd", "template_name.Rmd", package = "kinfitrapp")` to verify paths
+
+2. **Rmarkdown Rendering Errors**:
+   - **Cause**: Issues with R Markdown content, missing packages, or data formatting
+   - **Solution**: Check error messages in console output
+   - **Debug**: Test template rendering independently with `rmarkdown::render()`
+
+3. **Missing Dependencies**:
+   - **Cause**: Required packages not available (`rmarkdown`, `knitr`, `ggplot2`)
+   - **Solution**: Ensure all report dependencies are installed and loaded
+
+4. **Permission Issues**:
+   - **Cause**: Cannot write to reports directory
+   - **Solution**: Verify write permissions for `{analysis_folder}/reports/` directory
+
+5. **Parameter Mismatch**:
+   - **Cause**: Report parameters don't match template expectations
+   - **Solution**: Check parameter names and data structure in report generation functions
+
+**Diagnostic Steps**:
+1. Check console output for specific error messages
+2. Verify template files exist in `inst/rmd/`
+3. Test report generation manually with `generate_step_report()` or `generate_model_report()`
+4. Check directory permissions and disk space

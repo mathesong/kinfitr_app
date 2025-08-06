@@ -1,0 +1,182 @@
+---
+title: "Logan Graphical Analysis Report"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: hide
+params:
+  model_number: "Model 1"
+  analysis_folder: NULL
+  model_results: NULL
+  tacs_files: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(jsonlite)
+theme_set(theme_light())
+
+# Load configuration from standard location
+config_path <- file.path(params$analysis_folder, "desc-kinfitroptions_config.json")
+config <- NULL
+if (file.exists(config_path)) {
+  tryCatch({
+    config <- jsonlite::fromJSON(config_path)
+    cat("Loaded config from:", config_path, "\n")
+  }, error = function(e) {
+    cat("Warning: Could not load config file:", e$message, "\n")
+  })
+} else {
+  cat("Config file not found at:", config_path, "\n")
+}
+```
+
+# `r params$model_number`: Logan Graphical Analysis Report
+
+This report summarises the Logan graphical analysis results for the kinfitr analysis pipeline.
+
+## Analysis Configuration
+
+**Model:** `r params$model_number` - Logan Graphical Analysis
+
+**Analysis folder:** `r params$analysis_folder`
+
+**Generated on:** `r format(Sys.time(), "%Y-%m-%d %H:%M:%S")`
+
+## Logan Method Overview
+
+The Logan graphical analysis provides a model-independent approach to estimate the total volume of distribution (VT). The method plots:
+
+**∫₀ᵗ Cₜᵢₛₛᵤₑ(τ)dτ / Cₜᵢₛₛᵤₑ(t) vs ∫₀ᵗ Cₚₗₐₛₘₐ(τ)dτ / Cₜᵢₛₛᵤₑ(t)**
+
+The slope of the linear portion equals VT, and the intercept relates to the efflux rate constant.
+
+```{r model-config}
+# Extract model configuration for this specific model
+model_config <- NULL
+if (!is.null(config$Models)) {
+  if (params$model_number == "Model 1") {
+    model_config <- config$Models$Model1
+  } else if (params$model_number == "Model 2") {
+    model_config <- config$Models$Model2
+  } else if (params$model_number == "Model 3") {
+    model_config <- config$Models$Model3
+  }
+}
+
+if (!is.null(model_config) && model_config$type == "Logan") {
+  cat("Logan analysis configuration found and applied.")
+} else {
+  cat("Logan analysis configuration not found or incomplete.")
+}
+```
+
+## Analysis Parameters
+
+```{r logan-params}
+cat("Logan analysis parameters:")
+cat("\n- t* (start time): Time point where linear phase begins")
+cat("\n- vB fitting: Blood volume correction enabled/disabled")
+cat("\n- Linear fit range: Time points included in slope calculation")
+```
+
+## Logan Plot Analysis
+
+```{r logan-results}
+if (!is.null(params$model_results)) {
+  cat("Logan graphical analysis completed successfully.")
+  # Add results summary here
+} else {
+  cat("Logan analysis results not available.")
+  cat("\nLogan analysis will produce:")
+  cat("\n- VT estimates for each region and subject")
+  cat("\n- Linearity assessment (R² values)")
+  cat("\n- t* optimisation results")
+}
+```
+
+## VT Estimates
+
+```{r vt-estimates}
+cat("Volume of distribution (VT) estimates will show:")
+cat("\n- VT values for each TAC")
+cat("\n- Uncertainty estimates")
+cat("\n- Goodness of linear fit (R²)")
+cat("\n- Intercept values")
+```
+
+## Logan Plots Visualisation
+
+```{r logan-plots, fig.height=8, fig.width=12}
+cat("Logan plot visualisation will include:")
+cat("\n- Logan plots for each TAC showing linear fit")
+cat("\n- t* selection and linear range")
+cat("\n- Residuals from linear fit")
+cat("\n- VT distribution across regions")
+```
+
+## t* Selection Analysis
+
+```{r tstar-analysis}
+cat("t* (start time) analysis will show:")
+cat("\n- Optimal t* selection for each TAC")
+cat("\n- Sensitivity analysis of VT to t* choice")
+cat("\n- Linearity metrics vs. t* value")
+cat("\n- Recommended t* based on data quality")
+```
+
+## Regional VT Summary
+
+```{r regional-vt}
+cat("Regional VT summary will display:")
+cat("\n- Mean VT values by region")
+cat("\n- VT variability across subjects")
+cat("\n- Expected regional patterns")
+cat("\n- Comparison with literature values")
+```
+
+## Quality Control
+
+```{r logan-qc}
+cat("Logan analysis quality control:")
+cat("\n- Linearity assessment (R² > 0.95 recommended)")
+cat("\n- Appropriate t* selection")
+cat("\n- VT values within physiological range")
+cat("\n- Consistent results across similar regions")
+cat("\n- Blood volume correction validation")
+```
+
+## Advantages and Limitations
+
+```{r logan-notes}
+cat("Logan graphical analysis:")
+cat("\n")
+cat("**Advantages:**")
+cat("\n- Model-independent approach")
+cat("\n- Robust to noise in late time points")
+cat("\n- Does not require specific compartmental assumptions")
+cat("\n")
+cat("**Limitations:**")
+cat("\n- Requires identification of linear phase")
+cat("\n- Less precise than full kinetic modeling")
+cat("\n- Cannot separate specific and non-specific binding")
+```
+
+## Next Steps
+
+After reviewing this report:
+
+1. **Verify linearity**: Ensure good linear fits in Logan plots (R² > 0.95)
+2. **Check t* selection**: Confirm appropriate start time for linear phase
+3. **Assess VT values**: Verify physiologically reasonable distribution volumes
+4. **Compare with compartmental models**: Evaluate consistency with 1TCM/2TCM results
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```

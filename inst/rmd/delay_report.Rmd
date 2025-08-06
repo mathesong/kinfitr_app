@@ -1,0 +1,125 @@
+---
+title: "Delay Estimation Report"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: hide
+params:
+  analysis_folder: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(jsonlite)
+theme_set(theme_light())
+
+# Load configuration from standard location
+config_path <- file.path(params$analysis_folder, "desc-kinfitroptions_config.json")
+config <- NULL
+if (file.exists(config_path)) {
+  tryCatch({
+    config <- jsonlite::fromJSON(config_path)
+    cat("Loaded config from:", config_path, "\n")
+  }, error = function(e) {
+    cat("Warning: Could not load config file:", e$message, "\n")
+  })
+} else {
+  cat("Config file not found at:", config_path, "\n")
+}
+```
+
+# Delay Estimation Report
+
+This report summarises the delay estimation step between blood and tissue curves in the kinfitr analysis pipeline.
+
+## Analysis Configuration
+
+**Analysis folder:** `r params$analysis_folder`
+
+**Generated on:** `r format(Sys.time(), "%Y-%m-%d %H:%M:%S")`
+
+## Delay Estimation Method
+
+**Selected method:** `r params$method %||% "Not specified"`
+
+```{r delay-config}
+if (!is.null(config$FitDelay)) {
+  delay_config <- config$FitDelay
+  if (length(delay_config) > 0 && !is.null(names(delay_config))) {
+    config_df <- data.frame(
+      Parameter = names(delay_config),
+      Value = sapply(delay_config, as.character),
+      stringsAsFactors = FALSE
+    )
+    kable(config_df, caption = "Delay Estimation Configuration")
+  } else {
+    cat("Delay estimation configuration found but no specific parameters defined.")
+  }
+} else {
+  cat("No delay estimation configuration found.")
+}
+```
+
+## Delay Estimation Results
+
+```{r delay-results}
+if (!is.null(params$delay_results)) {
+  cat("Delay estimation has been completed.")
+  # Add specific delay results visualization here
+} else {
+  cat("Delay estimation is not yet implemented.")
+  cat("\nThis step will:")
+  cat("\n- Estimate timing delays between blood and tissue measurements")
+  cat("\n- Account for catheter and tubing delays")
+  cat("\n- Optimize temporal alignment for kinetic modeling")
+}
+```
+
+## Delay Visualisation
+
+```{r delay-plots, fig.height=6, fig.width=10}
+# This section will be populated with delay estimation plots
+cat("Delay estimation visualisation will include:")
+cat("\n- Blood vs. tissue curve alignment")
+cat("\n- Estimated delay values per subject/region")
+cat("\n- Cross-correlation plots")
+cat("\n- Before/after alignment comparison")
+```
+
+## Estimated Delays
+
+```{r delay-summary}
+cat("Delay estimation summary will show:")
+cat("\n- Mean and SD of estimated delays")
+cat("\n- Range of delay values")
+cat("\n- Subject-specific delay estimates")
+cat("\n- Regional variation in delays")
+```
+
+## Quality Control
+
+```{r delay-qc}
+cat("Quality control checks will verify:")
+cat("\n- Delays are within physiologically reasonable range")
+cat("\n- Consistent delay estimation across measurements")
+cat("\n- Improved curve alignment after delay correction")
+```
+
+## Next Steps
+
+After reviewing this report:
+
+1. **Verify delay estimates**: Confirm delays are physiologically reasonable
+2. **Check alignment quality**: Ensure improved blood-tissue curve alignment
+3. **Proceed to model fitting**: Configure kinetic models with delay-corrected data
+4. **Review quality metrics**: Address any identified alignment issues
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```

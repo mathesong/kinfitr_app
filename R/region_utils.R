@@ -522,6 +522,101 @@ extract_bids_attributes_from_filename <- function(filename) {
   return(result)
 }
 
+#' Calculate Segmentation Mean TAC
+#'
+#' @description Calculate volume-weighted mean TAC across all regions in the segmentation
+#'
+#' @param derivatives_folder Base path to derivatives folder
+#' @param tacs_relative_path Relative path to TACs file from derivatives folder
+#' @param morph_relative_path Relative path to morph file from derivatives folder
+#' @param regions_for_files Filtered regions config for these specific files
+#' @return Tibble with segmentation mean TAC for each time frame
+#' @export
+calculate_segmentation_mean_tac <- function(derivatives_folder, tacs_relative_path, 
+                                          morph_relative_path, regions_for_files) {
+  
+  # Construct full file paths
+  tacs_full_path <- file.path(derivatives_folder, tacs_relative_path)
+  morph_full_path <- file.path(derivatives_folder, morph_relative_path)
+  
+  # Validate file existence
+  if (!file.exists(tacs_full_path) || !file.exists(morph_full_path)) {
+    return(tibble::tibble())
+  }
+  
+  # Read data files
+  tacs_data <- tryCatch({
+    readr::read_tsv(tacs_full_path, show_col_types = FALSE)
+  }, error = function(e) {
+    warning(paste("Error reading TACs file for segmentation mean:", e$message))
+    return(NULL)
+  })
+  
+  morph_data <- tryCatch({
+    readr::read_tsv(morph_full_path, show_col_types = FALSE)
+  }, error = function(e) {
+    warning(paste("Error reading morph file for segmentation mean:", e$message))
+    return(NULL)
+  })
+  
+  if (is.null(tacs_data) || is.null(morph_data)) {
+    return(tibble::tibble())
+  }
+  
+  # Get all unique constituent regions from this segmentation
+  all_constituent_regions <- unique(regions_for_files$ConstituentRegion)
+  
+  # Check which regions are available in both datasets
+  available_in_tacs <- all_constituent_regions[all_constituent_regions %in% colnames(tacs_data)]
+  available_in_morph <- all_constituent_regions[all_constituent_regions %in% morph_data$name]
+  available_regions <- intersect(available_in_tacs, available_in_morph)
+  
+  if (length(available_regions) == 0) {
+    warning("No regions available for segmentation mean TAC calculation")
+    return(tibble::tibble())
+  }
+  
+  # Filter morph data for available regions
+  region_volumes <- morph_data %>%
+    dplyr::filter(name %in% available_regions) %>%
+    dplyr::select(name, `volume-mm3`)
+  
+  # Calculate total volume
+  total_volume <- sum(region_volumes$`volume-mm3`)
+  
+  if (total_volume == 0) {
+    warning("Total volume is zero for segmentation mean TAC calculation")
+    return(tibble::tibble())
+  }
+  
+  # Calculate volume fractions
+  region_volumes <- region_volumes %>%
+    dplyr::mutate(volume_fraction = `volume-mm3` / total_volume)
+  
+  # Initialize result with time columns
+  time_cols <- c("frame_start", "frame_end")
+  segmentation_mean <- tacs_data %>%
+    dplyr::select(dplyr::all_of(time_cols))
+  
+  # Calculate volume-weighted mean TAC for each time frame
+  weighted_tac_values <- rep(0, nrow(tacs_data))
+  
+  for (region in available_regions) {
+    volume_frac <- region_volumes$volume_fraction[region_volumes$name == region]
+    region_tac <- tacs_data[[region]]
+    weighted_tac_values <- weighted_tac_values + (region_tac * volume_frac)
+  }
+  
+  # Add calculated segmentation mean TAC
+  segmentation_mean$seg_meanTAC <- weighted_tac_values
+  
+  # Calculate frame duration and midpoint for consistency
+  segmentation_mean$frame_dur <- segmentation_mean$frame_end - segmentation_mean$frame_start
+  segmentation_mean$frame_mid <- segmentation_mean$frame_start + 0.5 * segmentation_mean$frame_dur
+  
+  return(segmentation_mean)
+}
+
 #' Create Consolidated kinfitr Combined TACs Output
 #'
 #' @description Create single consolidated TSV with BIDS attributes and long-format TACs
@@ -593,6 +688,14 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
       return(tibble::tibble())
     }
     
+    # Calculate segmentation mean TAC (volume-weighted mean of all regions in the segmentation)
+    segmentation_mean_tac <- tryCatch({
+      calculate_segmentation_mean_tac(derivatives_folder, tacs_file, morph_file, regions_data)
+    }, error = function(e) {
+      warning(paste("Error calculating segmentation mean TAC for", tacs_file, ":", e$message))
+      return(tibble::tibble())
+    })
+    
     # Extract BIDS attributes from filename
     bids_attributes <- extract_bids_attributes_from_filename(tacs_file)
     
@@ -626,6 +729,28 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
         bodyweight = NA_real_  # Always include bodyweight column, initially NA
       )
     
+    # Add segmentation mean TAC to the combined results
+    if (nrow(segmentation_mean_tac) > 0) {
+      # Add BIDS attributes to segmentation mean TAC data
+      segmentation_mean_tac_with_bids <- segmentation_mean_tac %>%
+        dplyr::mutate(
+          desc = as.character(bids_attributes$desc),
+          pet = as.character(bids_attributes$pet)
+        )
+      
+      # Join segmentation mean TAC with combined results
+      combined_results_with_bids <- combined_results_with_bids %>%
+        dplyr::left_join(
+          segmentation_mean_tac_with_bids %>% 
+            dplyr::select(frame_start, frame_end, desc, pet, seg_meanTAC),
+          by = c("frame_start", "frame_end", "desc", "pet")
+        )
+    } else {
+      # Add seg_meanTAC column with NA values if calculation failed
+      combined_results_with_bids <- combined_results_with_bids %>%
+        dplyr::mutate(seg_meanTAC = NA_real_)
+    }
+    
     # Add participant data if available
     if (!is.null(participant_data) && !is.null(participant_data$data)) {
       # Check for weight column duplication (participant data might have "weight" which maps to bodyweight)
@@ -650,10 +775,10 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
       character(0)
     }
     
-    # Column order: sub, ses, trc, rec, task, run, desc, pet, InjectedRadioactivity, bodyweight, [participant_columns], region, volume_mm3, frame_*, TAC
+    # Column order: sub, ses, trc, rec, task, run, desc, pet, InjectedRadioactivity, bodyweight, [participant_columns], region, volume_mm3, frame_*, seg_meanTAC, TAC
     base_columns <- c("sub", "ses", "trc", "rec", "task", "run", "desc", "pet", "InjectedRadioactivity", "bodyweight")
     frame_columns <- c("frame_start", "frame_end", "frame_dur", "frame_mid")
-    end_columns <- c("region", "volume_mm3", frame_columns, "TAC")
+    end_columns <- c("region", "volume_mm3", frame_columns, "seg_meanTAC", "TAC")
     
     column_order <- c(base_columns, participant_columns, end_columns)
     
@@ -1088,6 +1213,7 @@ create_combined_tacs_json_description <- function(participants_metadata, injecte
     "frame_end" = list("Description" = "Frame end time", "Units" = "seconds"),
     "frame_dur" = list("Description" = "Frame duration", "Units" = "seconds"),
     "frame_mid" = list("Description" = "Frame midpoint time", "Units" = "seconds"),
+    "seg_meanTAC" = list("Description" = "Volume-weighted mean TAC across all regions within the segmentation file (desc)"),
     "TAC" = list("Description" = "Time Activity Curve value (volume-weighted average)")
   )
   

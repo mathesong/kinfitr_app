@@ -94,7 +94,7 @@ create_individual_tacs_files <- function(filtered_data, output_dir) {
   # Group by individual measurements (sub, ses, pet)
   measurement_groups <- filtered_data %>%
     dplyr::group_by(sub, ses, pet) %>%
-    dplyr::group_nest(.key = "tacs_data")
+    dplyr::group_nest(.key = "tacs_data", keep = TRUE)
   
   created_files <- c()
   
@@ -123,7 +123,7 @@ create_individual_tacs_files <- function(filtered_data, output_dir) {
     
     # Select and reorder columns for output
     output_data <- tacs_data %>%
-      dplyr::select(region, volume_mm3, InjectedRadioactivity, bodyweight, 
+      dplyr::select(pet, region, volume_mm3, InjectedRadioactivity, bodyweight, 
                    frame_start, frame_end, frame_dur, frame_mid, TAC) %>%
       dplyr::arrange(region, frame_start)
     

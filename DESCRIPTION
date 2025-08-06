@@ -25,7 +25,12 @@ Imports:
     utils,
     magrittr,
     later,
-    readr
+    readr,
+    rmarkdown,
+    knitr,
+    ggplot2,
+    plotly,
+    crosstalk
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
