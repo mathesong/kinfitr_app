@@ -9,11 +9,11 @@ params:
   analysis_folder: NULL
 ---
 
-For temporary debugging, this defines temporary parameters for the parameterised report
+<!-- For temporary debugging, this defines temporary parameters for the parameterised report -->
 
-```{r}
-analysis_folder <- "/home/granville/Repositories/OpenNeuro/ds004869/derivatives/kinfitr/Primary_Analysis/"
-```
+<!-- ```{r} -->
+<!-- analysis_folder <- "/home/granville/Repositories/OpenNeuro/ds004869/derivatives/kinfitr/Primary_Analysis/" -->
+<!-- ``` -->
 
 
 ```{r setup, include=FALSE}
@@ -72,63 +72,6 @@ if (!is.null(config$Weights)) {
 }
 ```
 
-<!-- # Data Summary -->
-
-<!-- ```{r load-data} -->
-<!-- # Read all generated TACs files for comprehensive statistics -->
-<!-- tacs_files <- list.files(analysis_folder, -->
-<!--                         pattern = "*_desc-combinedregions_tacs.tsv", -->
-<!--                         recursive = TRUE) -->
-
-<!-- tacdata <- tibble( -->
-<!--   filename = tacs_files -->
-<!-- ) %>% -->
-<!--   mutate(basename = basename(filename)) %>% -->
-<!--   mutate(attributes = map(filename, kinfitr:::bids_filename_attributes)) %>% -->
-<!--   unnest(attributes) %>% -->
-<!--   group_by(filename) %>% -->
-<!--   mutate(tacs = map(filename, ~read_tsv(file.path(analysis_folder, .x), show_col_types = FALSE))) %>% -->
-<!--   unnest(tacs) %>% -->
-<!--   rename(pet = basename) %>% -->
-<!--   mutate(pet = str_remove(pet, "_desc-combinedregions_tacs.tsv")) %>% -->
-<!--   select(-measurement, -desc) -->
-<!-- ``` -->
-
-<!-- Total measurements: `r length(unique(tacdata$pet))` -->
-
-<!-- Total subjects: `r length(unique(tacdata$sub))` -->
-
-<!-- Total regions: `r length(unique(tacdata$region))` -->
-
-<!-- Total TACs: `r length(unique(  paste(tacdata$region, tacdata$pet) ))` -->
-
-<!-- Total number of frames: `r nrow(tacdata)` -->
-
-
-
-<!-- # Weights Configuration -->
-
-<!-- ```{r weights-config} -->
-<!-- # Extract weights configuration -->
-<!-- region_type <- config$Weights$region_type %||% "mean_combined" -->
-<!-- region_name <- config$Weights$region %||% "" -->
-<!-- external_tacs <- config$Weights$external_tacs %||% "" -->
-<!-- radioisotope <- config$Weights$radioisotope %||% "C11" -->
-<!-- halflife_raw <- config$Weights$halflife %||% "" -->
-<!-- method <- as.numeric(config$Weights$method %||% "2") -->
-<!-- custom_formula_raw <- config$Weights$custom_formula %||% "" -->
-<!-- minweight <- as.numeric(config$Weights$minweight %||% 0.25) -->
-
-<!-- # Convert empty strings back to NULL for function calls -->
-<!-- halflife <- if(halflife_raw == "" || is.null(halflife_raw)) NULL else as.numeric(halflife_raw) -->
-<!-- custom_formula <- if(custom_formula_raw == "" || is.null(custom_formula_raw)) NULL else custom_formula_raw -->
-
-<!-- cat("Region type:", region_type, "\n") -->
-<!-- cat("Method:", method, "\n") -->
-<!-- cat("Radioisotope:", radioisotope, "\n") -->
-<!-- cat("Half-life:", if(is.null(halflife)) "Default" else paste(halflife, "min"), "\n") -->
-<!-- cat("Minimum weight:", minweight, "\n") -->
-<!-- ``` -->
 
 # Region Selection and TAC Preparation
 
@@ -349,6 +292,13 @@ if( config$Weights$method != "custom" ) {
 ## Decay Correction Considerations
 
 ```{r define-hl}
+# Extract radioisotope and halflife from config
+radioisotope <- config$Weights$radioisotope %||% "C11"
+halflife_raw <- config$Weights$halflife %||% ""
+
+# Convert empty strings back to NULL for function calls
+halflife <- if(halflife_raw == "" || is.null(halflife_raw)) NULL else as.numeric(halflife_raw)
+
 # Prepare radioisotope and half-life
 if (radioisotope == "Other" && !is.null(halflife)) {
   radionuclide_halflife <- halflife
@@ -424,14 +374,26 @@ weights_final <- weights_output %>%
 
 
 ```{r gen-weights-defined, echo=create_defined_weights, eval=create_defined_weights}
-weights_output <- weights_tacdata %>% 
-  mutate(weights = weights_create(t_start = frame_start/60, 
-                                  t_end = frame_end/60, 
-                                  TAC, 
-                                  radioisotope = radioisotope_for_uncorrection, 
-                                  method = as.numeric(config$Weights$method), 
-                                  minweight = as.numeric(config$Weights$minweight), 
-                                  radionuclide_halflife = radionuclide_halflife))
+
+if (as.numeric(config$Weights$method) == 0) {
+  
+  # Method 0 (uniform weights)
+  weights_output <- weights_tacdata %>% 
+    mutate(weights = 1)
+
+} else {
+  
+  # Using pre-defined weighting methods
+  weights_output <- weights_tacdata %>% 
+    mutate(weights = weights_create(t_start = frame_start/60, 
+                                    t_end = frame_end/60, 
+                                    TAC, 
+                                    radioisotope = radioisotope_for_uncorrection, 
+                                    method = as.numeric(config$Weights$method), 
+                                    minweight = as.numeric(config$Weights$minweight), 
+                                    radionuclide_halflife = radionuclide_halflife))
+  
+}
 ```
 
 

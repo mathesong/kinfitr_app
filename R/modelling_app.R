@@ -254,7 +254,8 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                                column(8,
                                  div(style = "width: 100%;",
                                    selectInput("weights_method", "Method:",
-                                             choices = c("1. frame_dur / tac_uncor" = "1",
+                                             choices = c("0. Uniform (all weights = 1)" = "0",
+                                                       "1. frame_dur / tac_uncor" = "1",
                                                        "2. sqrt(frame_dur * tac_uncor) (default)" = "2",
                                                        "3. sqrt(frame_dur) / tac" = "3", 
                                                        "4. sqrt(frame_dur)" = "4",
@@ -311,10 +312,86 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                     ),
                     # Tab panel for delay ----
                     tabPanel("Fit Delay",
-                             h4("Fit Delay"),
-                             p("Estimate the delay between the blood and tissue curves"),
-                             br(),
-                             h5("Content coming soon..."),
+                             
+                             p("Here we estimate the delay between the TAC data and the blood input data.",
+                               style = "font-size:14px;"),
+                             # Blood data availability status
+                             div(id = "delay_blood_status",
+                                 style = "margin-bottom: 20px;",
+                                 uiOutput("delay_blood_availability")
+                             ),
+                             
+                             # Blood data source selection (conditional)
+                             conditionalPanel(
+                               condition = "output.delay_has_blood_data",
+                               div(
+                                 h3("Blood Data Source"),
+                                 p("Select the source of blood or input function data for delay estimation.",
+                                   style = "font-size:14px;"),
+                                 br(),
+                                 selectInput("delay_blood_source", "Blood Data Source:",
+                                           choices = c("Loading..." = ""),
+                                           selected = "",
+                                           width = "100%"),
+                                 div(id = "delay_blood_info", uiOutput("delay_blood_info_text")),
+                                 
+                                 hr(),
+                                 h3("Delay Fitting Configuration"),
+                                 br(),
+                                 
+                                 fluidRow(
+                                   column(6,
+                                     h4("Delay Estimation Approach"),
+                                     p("The recommended first approach is to fit a simple model (i.e. 1TCM) to the early frames of the acquisition, typically with weights turned off and with vB set to a reasonable fixed value, and to calculate delay from the median for multiple regions. Poor performance is usually resolved by altering the time window, using weights, or using another model.",
+                                       style = "font-size: 14px; margin-bottom: 15px;"),
+                                     selectInput("delay_model", "",
+                                                choices = c("Set to zero (i.e. no delay fitting to be performed)" = "zero",
+                                                          "Linear 2TCM Profile from Mean TAC (Very Quick)" = "lin2tcm_mean",
+                                                          "1TCM Delay from Mean TAC (Quick)" = "1tcm_mean",
+                                                          "2TCM Delay from Mean TAC (Less Quick)" = "2tcm_mean",
+                                                          "1TCM Median Delay from Multiple Regions (Recommended, Slow)" = "1tcm_median",
+                                                          "2TCM Median Delay from Multiple Regions (Very Slow)" = "2tcm_median"),
+                                                selected = "1tcm_median",
+                                                width = "100%"),
+                                     
+                                     # Conditional input for Multiple TACs approaches
+                                     conditionalPanel(
+                                       condition = "input.delay_model == '1tcm_median' || input.delay_model == '2tcm_median'",
+                                       br(),
+                                       textInput("delay_multiple_regions", "Regions for Multiple Regions Analysis (Optional):",
+                                               value = "",
+                                               placeholder = "e.g., Frontal;Temporal;Hippocampus;Striatum",
+                                               width = "100%"),
+                                       p("Optional: Define a subset of regions. Leave blank to estimate delay for all regions.", 
+                                         style = "font-size: 12px; color: #666; margin-top: 5px;")
+                                     )
+                                   ),
+                                   column(6,
+                                     h4("Time Window"),
+                                     numericInput("delay_time_window", "Minutes of data to fit delay over:",
+                                                value = 5, min = 1, max = 120, step = 0.5),
+                                     # p("It is recommended to restrict the fitting to the early phase of the PET measurement to optimise sensitivity.", 
+                                     #   style = "font-size: 12px; color: #666; margin-top: 5px;")
+                                   )
+                                 ),
+                                 
+                                 hr(),
+                                 h3("Parameter Settings"),
+                                 br(),
+                                 fluidRow(
+                                   column(6,
+                                     h4("Blood Volume (vB)"),
+                                     numericInput("delay_vB", "vB value:",
+                                                value = 0.05, min = 0, max = 1, step = 0.01),
+                                     checkboxInput("delay_fit_vB", "Fit vB parameter", value = FALSE)
+                                   ),
+                                   column(6,
+                                     h4("Weighting"),
+                                     checkboxInput("delay_use_weights", "Use frame weighting", value = FALSE)
+                                   )
+                                 )
+                               )
+                             ),
                              
                              hr(),
                              actionButton("run_delay", "▶ Estimate Delay", class = "btn-success btn-lg")
@@ -683,6 +760,88 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
           updateNumericInput(session, "weights_minweight", 
                            value = existing_config$Weights$minweight %||% 0.25)
         }
+        # Restore FitDelay settings
+        if (!is.null(existing_config$FitDelay)) {
+          updateSelectInput(session, "delay_blood_source", 
+                           selected = existing_config$FitDelay$blood_source %||% "")
+          updateSelectInput(session, "delay_model", 
+                           selected = existing_config$FitDelay$model %||% "1tcm_median")
+          updateNumericInput(session, "delay_time_window", 
+                           value = existing_config$FitDelay$time_window %||% 5)
+          updateTextInput(session, "delay_regions", 
+                         value = existing_config$FitDelay$regions %||% "")
+          updateTextInput(session, "delay_multiple_regions", 
+                         value = existing_config$FitDelay$multiple_regions %||% "")
+          updateNumericInput(session, "delay_vB", 
+                           value = existing_config$FitDelay$vB_value %||% 0.05)
+          updateCheckboxInput(session, "delay_fit_vB", 
+                            value = existing_config$FitDelay$fit_vB %||% FALSE)
+          updateCheckboxInput(session, "delay_use_weights", 
+                            value = existing_config$FitDelay$use_weights %||% FALSE)
+        }
+      }
+    })
+    
+    # Blood data detection and UI population ----
+    blood_sources <- reactive({
+      detect_blood_sources(bids_dir = bids_dir, derivatives_dir = derivatives_dir)
+    })
+    
+    # Update blood source dropdown
+    observe({
+      sources <- blood_sources()
+      choices <- if (length(sources) > 0) {
+        # Sort sources alphabetically
+        sorted_sources <- sort(sources)
+        setNames(sorted_sources, sorted_sources)
+      } else {
+        c("No blood data detected" = "")
+      }
+      
+      # Set selected to first alphabetically (if sources exist)
+      selected_value <- if (length(sources) > 0) {
+        sort(sources)[1]
+      } else {
+        ""
+      }
+      
+      updateSelectInput(session, "delay_blood_source", 
+                       choices = choices, 
+                       selected = selected_value)
+    })
+    
+    # Blood data availability indicator
+    output$delay_has_blood_data <- reactive({
+      length(blood_sources()) > 0
+    })
+    outputOptions(output, "delay_has_blood_data", suspendWhenHidden = FALSE)
+    
+    # Blood data availability message
+    output$delay_blood_availability <- renderUI({
+      sources <- blood_sources()
+      if (length(sources) == 0) {
+        div(
+          p(strong("⚠️ No blood data detected"), 
+            style = "color: #d73027; font-size: 16px; margin-bottom: 10px;"),
+          p("Delay estimation is only performed when there is blood and TAC data. No _blood.tsv or _inputfunction.tsv files detected in any of the provided directories.", 
+            style = "color: #d73027; font-size: 14px;")
+        )
+      } else {
+        div(
+          p(paste("✓", length(sources), "blood data source(s) detected"), 
+            style = "color: #1b7837; font-size: 16px; margin-bottom: 10px;")
+        )
+      }
+    })
+    
+    # Blood source info text
+    output$delay_blood_info_text <- renderUI({
+      source <- input$delay_blood_source
+      if (!is.null(source) && grepl("^Raw:", source)) {
+        div(
+          p("ℹ️ It is recommended to use the bloodstream app to process blood data with or without explicit modelling to at least control data quality.", 
+            style = "color: #3182bd; font-size: 13px; font-style: italic; margin-top: 10px;")
+        )
       }
     })
     
@@ -786,7 +945,14 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
       
       # Fit Delay
       FitDelay <- list(
-        method = "Not configured"
+        blood_source = input$delay_blood_source %||% "",
+        model = input$delay_model %||% "1tcm_median",
+        time_window = input$delay_time_window %||% 5,
+        regions = input$delay_regions %||% "",
+        multiple_regions = input$delay_multiple_regions %||% "",
+        vB_value = input$delay_vB %||% 0.05,
+        fit_vB = input$delay_fit_vB %||% FALSE,
+        use_weights = input$delay_use_weights %||% FALSE
       )
       
       # Models (capture actual model inputs)
@@ -983,9 +1149,25 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
     })
     
     observeEvent(input$run_delay, {
+      # Validate blood data availability
+      sources <- blood_sources()
+      if (length(sources) == 0) {
+        showNotification("Cannot estimate delay: No blood data detected", type = "error", duration = 5)
+        return()
+      }
+      
+      # Validate blood source selection
+      if (is.null(input$delay_blood_source) || input$delay_blood_source == "") {
+        showNotification("Please select a blood data source", type = "error", duration = 5)
+        return()
+      }
+      
+      # Save configuration
       save_config()
-      showNotification("Delay estimation completed", type = "message", duration = 3)
-      # TODO: Add actual delay estimation logic
+      showNotification("Delay configuration saved", type = "message", duration = 3)
+      
+      # Show generating report notification
+      showNotification("Generating report...", duration = NULL, id = "generating_report")
       
       # Generate delay report
       tryCatch({
@@ -994,11 +1176,19 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
           analysis_folder = output_dir
         )
         
+        # Remove generating notification and show completion
+        removeNotification(id = "generating_report")
+        
         if (!is.null(report_file)) {
-          showNotification("Delay report generated", type = "message", duration = 3)
+          showNotification("Delay report generated successfully", type = "message", duration = 5)
+        } else {
+          showNotification("Report generation completed", type = "message", duration = 5)
         }
         
       }, error = function(e) {
+        # Remove generating notification and show error
+        removeNotification(id = "generating_report")
+        showNotification("Error generating report", type = "error", duration = 5)
         cat("Warning: Could not generate delay report:", e$message, "\n")
       })
     })
