@@ -5,10 +5,12 @@
 #' @param step_name Character string name of the step ("data_definition", "weights", "delay")
 #' @param analysis_folder Character string path to the analysis folder
 #' @param output_dir Character string path to output directory (default: analysis_folder/reports)
+#' @param bids_dir Character string path to the BIDS directory (optional)
+#' @param blood_dir Character string path to the blood data directory (optional)
 #' 
 #' @return Character string path to the generated report file
 #' @export
-generate_step_report <- function(step_name, analysis_folder, output_dir = NULL) {
+generate_step_report <- function(step_name, analysis_folder, output_dir = NULL, bids_dir = NULL, blood_dir = NULL) {
   
   # Set default output directory
   if (is.null(output_dir)) {
@@ -34,7 +36,9 @@ generate_step_report <- function(step_name, analysis_folder, output_dir = NULL) 
   
   # Prepare parameters - reports are now self-deriving
   params <- list(
-    analysis_folder = analysis_folder
+    analysis_folder = analysis_folder,
+    bids_dir = bids_dir,
+    blood_dir = blood_dir
   )
   
   # Generate report
@@ -63,14 +67,14 @@ generate_step_report <- function(step_name, analysis_folder, output_dir = NULL) 
 #' @param model_type Character string type of model ("1TCM", "2TCM", "Logan", "Fit Delay")
 #' @param model_number Character string model number ("Model 1", "Model 2", "Model 3")
 #' @param analysis_folder Character string path to the analysis folder
-#' @param model_results List containing model-specific results
-#' @param tacs_files Character vector of TACs files used
 #' @param output_dir Character string path to output directory (default: analysis_folder/reports)
+#' @param bids_dir Character string path to the BIDS directory (optional)
+#' @param blood_dir Character string path to the blood data directory (optional)
 #' 
 #' @return Character string path to the generated report file
 #' @export
 generate_model_report <- function(model_type, model_number, analysis_folder, 
-                                 model_results = NULL, tacs_files = NULL, output_dir = NULL) {
+                                 output_dir = NULL, bids_dir = NULL, blood_dir = NULL) {
   
   # Set default output directory
   if (is.null(output_dir)) {
@@ -101,8 +105,8 @@ generate_model_report <- function(model_type, model_number, analysis_folder,
   params <- list(
     model_number = model_number,
     analysis_folder = analysis_folder,
-    model_results = model_results,
-    tacs_files = tacs_files
+    bids_dir = bids_dir,
+    blood_dir = blood_dir
   )
   
   # Generate report

@@ -3,6 +3,9 @@ title: "kinfitr Model Report"
 output: html_document
 params:
   config_file: NULL
+  analysis_folder: NULL
+  bids_dir: NULL
+  blood_dir: NULL
 ---
 
 ```{r setup, include=FALSE}

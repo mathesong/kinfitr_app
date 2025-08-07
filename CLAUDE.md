@@ -379,6 +379,71 @@ jsonlite::write_json(config, output_path, pretty = TRUE, auto_unbox = TRUE)
 
 This ensures consistent, reliable file operations and prevents data type conversion issues with tabular data while maintaining proper JSON handling.
 
+### Delay Fitting System Architecture
+
+**Blood Data Detection and Status Display**: The system provides Docker-compatible blood data detection with clean visual feedback:
+
+#### Blood Data Detection Logic
+The system detects blood data files using the pattern `"_(blood|inputfunction)\\.tsv$"` to find both:
+- `*_blood.tsv` files (raw BIDS blood data)
+- `*_inputfunction.tsv` files (processed input functions)
+
+#### Status Display Scenarios
+
+| Scenario | bids_dir | blood_dir | Blood Files Found | Display |
+|----------|----------|-----------|-------------------|---------|
+| **Explicit blood directory provided** | Any | ✓ Provided | ✓ Found | ✅ **Green tick**: "Blood data found" + file count |
+| **Explicit blood directory provided** | Any | ✓ Provided | ✗ Not found | ❌ **Red cross**: "No blood data found in blood_dir" |
+| **BIDS directory only** | ✓ Provided | ✗ Not provided | ✓ Found | ✅ **Green tick**: "Blood data found" + recommendation |
+| **BIDS directory only** | ✓ Provided | ✗ Not provided | ✗ Not found | ❌ **Red cross**: "No blood data found in bids_dir" |
+| **No directories provided** | ✗ Not provided | ✗ Not provided | N/A | ⚠️ **Warning**: "No blood data available" |
+
+#### Key Features
+- **Docker-compatible**: No directory paths shown (problematic in containers where paths may differ)
+- **Comprehensive detection**: Handles both raw blood data and processed input functions
+- **Visual feedback**: Clear green tick (✓) for success, red cross (✗) for missing data
+- **Consistent logic**: Same detection used for both UI display and processing validation
+- **User-friendly messaging**: File counts and helpful recommendations without technical details
+
+#### Implementation Details
+- Status display function: `delay_blood_status_display` (modelling_app.R:778-843)
+- Processing validation: `run_delay` event handler (modelling_app.R:1148-1169)
+- Helper function: `check_blood_files()` for consistent file detection logic
+
+**Delay Estimation Approaches**: Comprehensive set of delay estimation methods ordered by computational speed:
+
+- `"Set to zero (i.e. no delay fitting to be performed)"` - Skip delay estimation entirely
+- `"1TCM Delay from Single Representative TAC (Quick)"` - Single region approach
+- `"2TCM Delay from Single Representative TAC (Less Quick)"` - Complex model, single region  
+- `"1TCM Median Delay from Multiple Regions (Recommended, Slow)"` - **Default**, multiple region analysis
+- `"2TCM Median Delay from Multiple Regions (Very Slow)"` - Most comprehensive approach
+
+**Note**: Linear 2TCM Profile method is commented out in the code for future implementation.
+
+**Multiple Regions Analysis**: For "Multiple Regions" approaches:
+- **Optional Region Subsetting**: `delay_multiple_regions` field allows semicolon-separated region specification
+- **Default Behavior**: Leave blank to analyze all available regions
+- **Conditional UI**: Text input only appears when multiple regions approaches are selected
+
+**Configuration Fields**: FitDelay section includes:
+- `blood_source`: Selected blood data source
+- `model`: Delay estimation approach (default: `"1tcm_median"`)
+- `time_window`: Minutes of data for fitting (default: 5, recommended for early phase sensitivity)
+- `regions`: General region selection (legacy)
+- `multiple_regions`: Region subset for multiple regions approaches
+- `vB_value`, `fit_vB`, `use_weights`: Parameter settings
+- `inpshift_lower`, `inpshift_upper`: Blood input time shift search limits in minutes (defaults: -0.5, 0.5)
+
+**Blood Input Time Shift Controls**: The system provides user-configurable limits for the delay parameter search range:
+
+- **UI Controls**: Two numeric inputs in the "Blood Time Shift Search Range" section of the delay fitting tab
+  - Lower limit: Default -0.5 minutes (range: -5 to 0, step 0.1)
+  - Upper limit: Default 0.5 minutes (range: 0 to 5, step 0.1)
+- **Purpose**: Defines the search boundaries for the `inpshift` parameter during model fitting
+- **Interpretation**: Time shift represents the degree to which blood input times are adjusted to align with tissue data
+- **Implementation**: Added to all delay estimation model fitting functions (`onetcm`, `twotcm`) via `inpshift.lower` and `inpshift.upper` parameters
+- **Report Display**: Time shift limits are shown in the delay report's Parameter Settings section for transparency
+
 ### Weights System Architecture
 
 **External Segmentation Support**: The system now supports using volume-weighted mean TACs from entire segmentations for weights calculation through an optimized workflow:

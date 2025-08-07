@@ -4,10 +4,11 @@
 #'
 #' @param bids_dir Character string path to the BIDS directory (default: NULL)
 #' @param derivatives_dir Character string path to the derivatives folder (default: bids_dir/derivatives)
+#' @param blood_dir Character string path to the blood data directory (default: NULL)
 #' @param subfolder Character string name for analysis subfolder (default: "Primary_Analysis")
 #' @param config_file Character string path to existing config file (optional)
 #' @export
-modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "Primary_Analysis", config_file = NULL) {
+modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = NULL, subfolder = "Primary_Analysis", config_file = NULL) {
   
   # Set derivatives directory logic
   if (is.null(derivatives_dir)) {
@@ -51,6 +52,11 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
     stop(paste("Config file does not exist:", config_file), call. = FALSE)
   }
   
+  # Validate blood_dir if provided
+  if (!is.null(blood_dir) && !dir.exists(blood_dir)) {
+    stop(paste("Blood directory cannot be found:", blood_dir), call. = FALSE)
+  }
+  
   # Print configuration
   cat("Starting Modelling App:\n")
   if (!is.null(bids_dir)) {
@@ -58,6 +64,9 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
   }
   cat("  Derivatives directory:", derivatives_dir, "\n")
   cat("  kinfitr directory:", kinfitr_dir, "\n")
+  if (!is.null(blood_dir)) {
+    cat("  Blood directory:", blood_dir, "\n")
+  }
   cat("  Analysis subfolder:", subfolder, "\n")
   if (!is.null(config_file)) {
     cat("  Config file:", config_file, "\n")
@@ -313,46 +322,36 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                     # Tab panel for delay ----
                     tabPanel("Fit Delay",
                              
-                             p("Here we estimate the delay between the TAC data and the blood input data.",
-                               style = "font-size:14px;"),
-                             # Blood data availability status
+                             # p("Here we estimate the delay between the TAC data and the blood input data.",
+                             #   style = "font-size:14px;"),
+                             # Blood data status (simple display)
                              div(id = "delay_blood_status",
-                                 style = "margin-bottom: 20px;",
-                                 uiOutput("delay_blood_availability")
+                                 style = "margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;",
+                                 uiOutput("delay_blood_status_display")
                              ),
                              
-                             # Blood data source selection (conditional)
-                             conditionalPanel(
-                               condition = "output.delay_has_blood_data",
-                               div(
-                                 h3("Blood Data Source"),
-                                 p("Select the source of blood or input function data for delay estimation.",
-                                   style = "font-size:14px;"),
-                                 br(),
-                                 selectInput("delay_blood_source", "Blood Data Source:",
-                                           choices = c("Loading..." = ""),
-                                           selected = "",
-                                           width = "100%"),
-                                 div(id = "delay_blood_info", uiOutput("delay_blood_info_text")),
-                                 
-                                 hr(),
-                                 h3("Delay Fitting Configuration"),
-                                 br(),
+                             # h3("Delay Fitting Configuration"),
+                             # br(),
+                             p("The recommended first approach is to fit a simple model (i.e. 1TCM) to the early frames of the acquisition, typically with weights turned off and with vB set to a reasonable fixed value, and to calculate delay from the median for multiple regions. Poor performance is usually resolved by altering the time window, using weights, or using another model.",
+                               style = "font-size: 14px; margin-bottom: 15px;"),
                                  
                                  fluidRow(
                                    column(6,
                                      h4("Delay Estimation Approach"),
-                                     p("The recommended first approach is to fit a simple model (i.e. 1TCM) to the early frames of the acquisition, typically with weights turned off and with vB set to a reasonable fixed value, and to calculate delay from the median for multiple regions. Poor performance is usually resolved by altering the time window, using weights, or using another model.",
-                                       style = "font-size: 14px; margin-bottom: 15px;"),
                                      selectInput("delay_model", "",
                                                 choices = c("Set to zero (i.e. no delay fitting to be performed)" = "zero",
-                                                          "Linear 2TCM Profile from Mean TAC (Very Quick)" = "lin2tcm_mean",
-                                                          "1TCM Delay from Mean TAC (Quick)" = "1tcm_mean",
-                                                          "2TCM Delay from Mean TAC (Less Quick)" = "2tcm_mean",
+                                                          # "Linear 2TCM Profile from Single Representative TAC (Very Quick)" = "lin2tcm_singletac",
+                                                          "1TCM Delay from Single Representative TAC (Quick)" = "1tcm_singletac",
+                                                          "2TCM Delay from Single Representative TAC (Less Quick)" = "2tcm_singletac",
                                                           "1TCM Median Delay from Multiple Regions (Recommended, Slow)" = "1tcm_median",
                                                           "2TCM Median Delay from Multiple Regions (Very Slow)" = "2tcm_median"),
                                                 selected = "1tcm_median",
                                                 width = "100%"),
+                                     conditionalPanel(
+                                       condition = "input.delay_model == '1tcm_singletac' || input.delay_model == '2tcm_singletac'",
+                                       p("Note: \"Single Representative TAC\" methods use the same TAC that was used for weights calculation.", 
+                                         style = "font-size: 12px; color: #666; margin-top: 5px;")
+                                     ),
                                      
                                      # Conditional input for Multiple TACs approaches
                                      conditionalPanel(
@@ -368,7 +367,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                                    ),
                                    column(6,
                                      h4("Time Window"),
-                                     numericInput("delay_time_window", "Minutes of data to fit delay over:",
+                                     numericInput("delay_time_window", "Minutes of TAC data to fit delay over:",
                                                 value = 5, min = 1, max = 120, step = 0.5),
                                      # p("It is recommended to restrict the fitting to the early phase of the PET measurement to optimise sensitivity.", 
                                      #   style = "font-size: 12px; color: #666; margin-top: 5px;")
@@ -379,19 +378,27 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                                  h3("Parameter Settings"),
                                  br(),
                                  fluidRow(
-                                   column(6,
+                                   column(4,
                                      h4("Blood Volume (vB)"),
                                      numericInput("delay_vB", "vB value:",
                                                 value = 0.05, min = 0, max = 1, step = 0.01),
                                      checkboxInput("delay_fit_vB", "Fit vB parameter", value = FALSE)
                                    ),
-                                   column(6,
+                                   column(4,
+                                     h4("Blood Time Shift Search Range"),
+                                     p("Upper and lower limits for range for blood time shift (minutes):", 
+                                       style = "font-size: 12px; color: #666; margin-bottom: 10px;"),
+                                     numericInput("delay_inpshift_lower", "Lower limit:",
+                                                value = -0.5, min = -5, max = 0, step = 0.1),
+                                     numericInput("delay_inpshift_upper", "Upper limit:",
+                                                value = 0.5, min = 0, max = 5, step = 0.1)
+                                   ),
+                                   column(4,
                                      h4("Weighting"),
-                                     checkboxInput("delay_use_weights", "Use frame weighting", value = FALSE)
+                                     checkboxInput("delay_use_weights", "Use frame weighting", value = FALSE),
+                                     br(),
                                    )
-                                 )
-                               )
-                             ),
+                                 ),
                              
                              hr(),
                              actionButton("run_delay", "▶ Estimate Delay", class = "btn-success btn-lg")
@@ -762,8 +769,6 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         }
         # Restore FitDelay settings
         if (!is.null(existing_config$FitDelay)) {
-          updateSelectInput(session, "delay_blood_source", 
-                           selected = existing_config$FitDelay$blood_source %||% "")
           updateSelectInput(session, "delay_model", 
                            selected = existing_config$FitDelay$model %||% "1tcm_median")
           updateNumericInput(session, "delay_time_window", 
@@ -778,69 +783,82 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
                             value = existing_config$FitDelay$fit_vB %||% FALSE)
           updateCheckboxInput(session, "delay_use_weights", 
                             value = existing_config$FitDelay$use_weights %||% FALSE)
+          updateNumericInput(session, "delay_inpshift_lower", 
+                           value = existing_config$FitDelay$inpshift_lower %||% -0.5)
+          updateNumericInput(session, "delay_inpshift_upper", 
+                           value = existing_config$FitDelay$inpshift_upper %||% 0.5)
         }
       }
     })
     
-    # Blood data detection and UI population ----
-    blood_sources <- reactive({
-      detect_blood_sources(bids_dir = bids_dir, derivatives_dir = derivatives_dir)
-    })
-    
-    # Update blood source dropdown
-    observe({
-      sources <- blood_sources()
-      choices <- if (length(sources) > 0) {
-        # Sort sources alphabetically
-        sorted_sources <- sort(sources)
-        setNames(sorted_sources, sorted_sources)
-      } else {
-        c("No blood data detected" = "")
+    # Blood data status display ----
+    output$delay_blood_status_display <- renderUI({
+      # Helper function to check for blood data files in a directory
+      check_blood_files <- function(dir_path) {
+        if (is.null(dir_path) || !dir.exists(dir_path)) {
+          return(list(found = FALSE, files = character(0)))
+        }
+        
+        blood_files <- list.files(dir_path, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)
+        return(list(found = length(blood_files) > 0, files = blood_files))
       }
       
-      # Set selected to first alphabetically (if sources exist)
-      selected_value <- if (length(sources) > 0) {
-        sort(sources)[1]
+      if (!is.null(blood_dir)) {
+        # User provided blood_dir - check for blood data files
+        blood_status <- check_blood_files(blood_dir)
+        
+        if (blood_status$found) {
+          div(
+            p(strong("✓ Blood data found"), 
+              style = "color: #1b7837; font-size: 16px; margin-bottom: 5px;")
+          )
+        } else {
+          div(
+            p(strong("✗ No blood data found in blood_dir"), 
+              style = "color: #d73027; font-size: 16px; margin-bottom: 5px;"),
+            p("No _blood.tsv or _inputfunction.tsv files detected in the specified blood directory", 
+              style = "color: #d73027; font-size: 14px;")
+          )
+        }
+      } else if (!is.null(bids_dir)) {
+        # Check for blood files in analysis folder first, then BIDS directory
+        blood_status_analysis <- check_blood_files(output_dir)
+        blood_status_bids <- check_blood_files(bids_dir)
+        
+        if (blood_status_analysis$found) {
+          # Prioritize analysis folder data
+          div(
+            p(strong("✓ Blood data found in kinfitr analysis folder"), 
+              style = "color: #1b7837; font-size: 16px; margin-bottom: 10px;")
+          )
+        } else if (blood_status_bids$found) {
+          # Fall back to raw BIDS data
+          div(
+            p(strong("✓ Blood data found in raw BIDS data directory"), 
+              style = "color: #1b7837; font-size: 16px; margin-bottom: 10px;"),
+            div(
+              style = "background-color: #e8f4f8; border-left: 4px solid #3182bd; padding: 10px; margin-top: 10px;",
+              p(strong("💡 Recommendation:"), "Consider using bloodstream for blood processing.", 
+                style = "color: #3182bd; font-size: 13px; margin: 0;")
+            )
+          )
+        } else {
+          div(
+            p(strong("✗ No blood data found"), 
+              style = "color: #d73027; font-size: 16px; margin-bottom: 10px;"),
+            p("No _blood.tsv or _inputfunction.tsv files detected in BIDS directory or analysis folder", 
+              style = "color: #d73027; font-size: 14px; margin-bottom: 10px;"),
+            p("If your analysis does not involve blood data, then delay estimation is unnecessary.", 
+              style = "color: #666; font-size: 14px;")
+          )
+        }
       } else {
-        ""
-      }
-      
-      updateSelectInput(session, "delay_blood_source", 
-                       choices = choices, 
-                       selected = selected_value)
-    })
-    
-    # Blood data availability indicator
-    output$delay_has_blood_data <- reactive({
-      length(blood_sources()) > 0
-    })
-    outputOptions(output, "delay_has_blood_data", suspendWhenHidden = FALSE)
-    
-    # Blood data availability message
-    output$delay_blood_availability <- renderUI({
-      sources <- blood_sources()
-      if (length(sources) == 0) {
+        # Neither blood_dir nor bids_dir provided
         div(
-          p(strong("⚠️ No blood data detected"), 
+          p(strong("⚠️ No blood data available"), 
             style = "color: #d73027; font-size: 16px; margin-bottom: 10px;"),
-          p("Delay estimation is only performed when there is blood and TAC data. No _blood.tsv or _inputfunction.tsv files detected in any of the provided directories.", 
+          p("Delay estimation requires blood data. Please provide a blood_dir parameter or bids_dir parameter when starting the app.", 
             style = "color: #d73027; font-size: 14px;")
-        )
-      } else {
-        div(
-          p(paste("✓", length(sources), "blood data source(s) detected"), 
-            style = "color: #1b7837; font-size: 16px; margin-bottom: 10px;")
-        )
-      }
-    })
-    
-    # Blood source info text
-    output$delay_blood_info_text <- renderUI({
-      source <- input$delay_blood_source
-      if (!is.null(source) && grepl("^Raw:", source)) {
-        div(
-          p("ℹ️ It is recommended to use the bloodstream app to process blood data with or without explicit modelling to at least control data quality.", 
-            style = "color: #3182bd; font-size: 13px; font-style: italic; margin-top: 10px;")
         )
       }
     })
@@ -945,14 +963,15 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
       
       # Fit Delay
       FitDelay <- list(
-        blood_source = input$delay_blood_source %||% "",
         model = input$delay_model %||% "1tcm_median",
         time_window = input$delay_time_window %||% 5,
         regions = input$delay_regions %||% "",
         multiple_regions = input$delay_multiple_regions %||% "",
         vB_value = input$delay_vB %||% 0.05,
         fit_vB = input$delay_fit_vB %||% FALSE,
-        use_weights = input$delay_use_weights %||% FALSE
+        use_weights = input$delay_use_weights %||% FALSE,
+        inpshift_lower = input$delay_inpshift_lower %||% -0.5,
+        inpshift_upper = input$delay_inpshift_upper %||% 0.5
       )
       
       # Models (capture actual model inputs)
@@ -971,6 +990,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
       config_list <- list(
         analysis_folder = subfolder,
         config_created = format(Sys.time(), "%Y-%m-%d %H:%M"),
+        blood_dir = blood_dir,
         Subsetting = Subsetting,
         Weights = Weights,
         FitDelay = FitDelay,
@@ -1082,7 +1102,9 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         tryCatch({
           report_file <- generate_step_report(
             step_name = "data_definition",
-            analysis_folder = analysis_folder
+            analysis_folder = analysis_folder,
+            bids_dir = bids_dir,
+            blood_dir = blood_dir
           )
           
           # Remove generating notification and show completion
@@ -1129,7 +1151,9 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
       tryCatch({
         report_file <- generate_step_report(
           step_name = "weights",
-          analysis_folder = output_dir
+          analysis_folder = output_dir,
+          bids_dir = bids_dir,
+          blood_dir = blood_dir
         )
         
         removeNotification(id = "generating_weights_report")
@@ -1149,16 +1173,26 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
     })
     
     observeEvent(input$run_delay, {
-      # Validate blood data availability
-      sources <- blood_sources()
-      if (length(sources) == 0) {
-        showNotification("Cannot estimate delay: No blood data detected", type = "error", duration = 5)
-        return()
+      # Check if blood data is available using same logic as status display
+      check_blood_files <- function(dir_path) {
+        if (is.null(dir_path) || !dir.exists(dir_path)) {
+          return(FALSE)
+        }
+        blood_files <- list.files(dir_path, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)
+        return(length(blood_files) > 0)
       }
       
-      # Validate blood source selection
-      if (is.null(input$delay_blood_source) || input$delay_blood_source == "") {
-        showNotification("Please select a blood data source", type = "error", duration = 5)
+      has_blood_data <- FALSE
+      
+      if (!is.null(blood_dir)) {
+        has_blood_data <- check_blood_files(blood_dir)
+      } else if (!is.null(bids_dir)) {
+        # Check analysis folder first, then BIDS directory
+        has_blood_data <- check_blood_files(output_dir) || check_blood_files(bids_dir)
+      }
+      
+      if (!has_blood_data) {
+        # Don't show notification - the status display already indicates no blood data
         return()
       }
       
@@ -1167,17 +1201,19 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
       showNotification("Delay configuration saved", type = "message", duration = 3)
       
       # Show generating report notification
-      showNotification("Generating report...", duration = NULL, id = "generating_report")
+      showNotification("Estimating delays...", type = "message", duration = NULL, id = "generating_delay_report")
       
       # Generate delay report
       tryCatch({
         report_file <- generate_step_report(
           step_name = "delay",
-          analysis_folder = output_dir
+          analysis_folder = output_dir,
+          bids_dir = bids_dir,
+          blood_dir = blood_dir
         )
         
         # Remove generating notification and show completion
-        removeNotification(id = "generating_report")
+        removeNotification(id = "generating_delay_report")
         
         if (!is.null(report_file)) {
           showNotification("Delay report generated successfully", type = "message", duration = 5)
@@ -1187,7 +1223,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
         
       }, error = function(e) {
         # Remove generating notification and show error
-        removeNotification(id = "generating_report")
+        removeNotification(id = "generating_delay_report")
         showNotification("Error generating report", type = "error", duration = 5)
         cat("Warning: Could not generate delay report:", e$message, "\n")
       })
@@ -1206,8 +1242,8 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
           model_type = model_type,
           model_number = "Model 1",
           analysis_folder = output_dir,
-          model_results = NULL,  # TODO: Add actual model results when implemented
-          tacs_files = NULL      # TODO: Add TACs files list when available
+          bids_dir = bids_dir,
+          blood_dir = blood_dir
         )
         
         if (!is.null(report_file)) {
@@ -1232,8 +1268,8 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
           model_type = model_type,
           model_number = "Model 2",
           analysis_folder = output_dir,
-          model_results = NULL,  # TODO: Add actual model results when implemented
-          tacs_files = NULL      # TODO: Add TACs files list when available
+          bids_dir = bids_dir,
+          blood_dir = blood_dir
         )
         
         if (!is.null(report_file)) {
@@ -1258,8 +1294,8 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, subfolder = "
           model_type = model_type,
           model_number = "Model 3",
           analysis_folder = output_dir,
-          model_results = NULL,  # TODO: Add actual model results when implemented
-          tacs_files = NULL      # TODO: Add TACs files list when available
+          bids_dir = bids_dir,
+          blood_dir = blood_dir
         )
         
         if (!is.null(report_file)) {

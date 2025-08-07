@@ -3,10 +3,14 @@ devtools::document()
 devtools::load_all()
 
 bids_dir <- "/home/granville/Repositories/OpenNeuro/ds004869/"
+blood_dir <- "/home/granville/Repositories/OpenNeuro/ds004869/derivatives/bloodstream/"
+
+modelling_app(bids_dir, blood_dir = blood_dir)
+
+
+
 
 modelling_app(bids_dir)
-
-
 
 
 region_definition_app(bids_dir)

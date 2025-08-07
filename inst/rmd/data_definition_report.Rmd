@@ -7,6 +7,8 @@ output:
     code_folding: hide
 params:
   analysis_folder: NULL
+  bids_dir: NULL
+  blood_dir: NULL
 ---
 
 <!-- For temporary debugging, this defines temporary parameters for the parameterised report -->
@@ -28,8 +30,10 @@ library(htmltools)
 
 theme_set(theme_light())
 
-# Use analysis_folder (from params or debugging section above)
+# Use parameters (from params or debugging section above)
 analysis_folder <- params$analysis_folder %||% analysis_folder
+bids_dir <- params$bids_dir %||% NULL
+blood_dir <- params$blood_dir %||% NULL
 
 # Load configuration from standard location
 config_path <- file.path(analysis_folder, "desc-kinfitroptions_config.json")

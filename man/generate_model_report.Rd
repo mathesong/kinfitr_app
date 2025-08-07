@@ -8,9 +8,9 @@ generate_model_report(
   model_type,
   model_number,
   analysis_folder,
-  model_results = NULL,
-  tacs_files = NULL,
-  output_dir = NULL
+  output_dir = NULL,
+  bids_dir = NULL,
+  blood_dir = NULL
 )
 }
 \arguments{
@@ -20,11 +20,11 @@ generate_model_report(
 
 \item{analysis_folder}{Character string path to the analysis folder}
 
-\item{model_results}{List containing model-specific results}
-
-\item{tacs_files}{Character vector of TACs files used}
-
 \item{output_dir}{Character string path to output directory (default: analysis_folder/reports)}
+
+\item{bids_dir}{Character string path to the BIDS directory (optional)}
+
+\item{blood_dir}{Character string path to the blood data directory (optional)}
 }
 \value{
 Character string path to the generated report file

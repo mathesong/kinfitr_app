@@ -4,7 +4,13 @@
 \alias{generate_step_report}
 \title{Generate Step Report}
 \usage{
-generate_step_report(step_name, analysis_folder, output_dir = NULL)
+generate_step_report(
+  step_name,
+  analysis_folder,
+  output_dir = NULL,
+  bids_dir = NULL,
+  blood_dir = NULL
+)
 }
 \arguments{
 \item{step_name}{Character string name of the step ("data_definition", "weights", "delay")}
@@ -12,6 +18,10 @@ generate_step_report(step_name, analysis_folder, output_dir = NULL)
 \item{analysis_folder}{Character string path to the analysis folder}
 
 \item{output_dir}{Character string path to output directory (default: analysis_folder/reports)}
+
+\item{bids_dir}{Character string path to the BIDS directory (optional)}
+
+\item{blood_dir}{Character string path to the blood data directory (optional)}
 }
 \value{
 Character string path to the generated report file

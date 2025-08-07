@@ -4,6 +4,7 @@
 #'
 #' @param bids_dir Character string path to the BIDS directory (default: NULL)
 #' @param derivatives_dir Character string path to derivatives directory (default: bids_dir/derivatives if bids_dir provided)
+#' @param blood_dir Character string path to the blood data directory (default: NULL, for modelling app)
 #' @param kinfitr_output_foldername Character string name for kinfitr output folder within derivatives (default: "kinfitr")
 #' @param subfolder Character string name for analysis subfolder (default: "Primary_Analysis")
 #' @param config_file Character string path to existing config file (optional, for modelling app)
@@ -25,6 +26,7 @@
 #' @export
 launch_apps <- function(bids_dir = NULL, 
                        derivatives_dir = NULL, 
+                       blood_dir = NULL,
                        kinfitr_output_foldername = "kinfitr",
                        subfolder = "Primary_Analysis",
                        config_file = NULL,
@@ -45,6 +47,9 @@ launch_apps <- function(bids_dir = NULL,
     cat("  Derivatives directory:", derivatives_dir, "\n")
   } else if (!is.null(bids_dir)) {
     cat("  Derivatives directory:", file.path(bids_dir, "derivatives"), "(default)\n")
+  }
+  if (!is.null(blood_dir)) {
+    cat("  Blood directory:", blood_dir, "\n")
   }
   cat("  kinfitr output folder:", kinfitr_output_foldername, "\n")
   cat("  Analysis subfolder:", subfolder, "\n")
@@ -76,6 +81,7 @@ launch_apps <- function(bids_dir = NULL,
     modelling_app(
       bids_dir = bids_dir,
       derivatives_dir = derivatives_dir,
+      blood_dir = blood_dir,
       subfolder = subfolder,
       config_file = config_file
     )

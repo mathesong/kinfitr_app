@@ -7,6 +7,7 @@
 modelling_app(
   bids_dir = NULL,
   derivatives_dir = NULL,
+  blood_dir = NULL,
   subfolder = "Primary_Analysis",
   config_file = NULL
 )
@@ -15,6 +16,8 @@ modelling_app(
 \item{bids_dir}{Character string path to the BIDS directory (default: NULL)}
 
 \item{derivatives_dir}{Character string path to the derivatives folder (default: bids_dir/derivatives)}
+
+\item{blood_dir}{Character string path to the blood data directory (default: NULL)}
 
 \item{subfolder}{Character string name for analysis subfolder (default: "Primary_Analysis")}
 

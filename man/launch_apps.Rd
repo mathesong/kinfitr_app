@@ -7,6 +7,7 @@
 launch_apps(
   bids_dir = NULL,
   derivatives_dir = NULL,
+  blood_dir = NULL,
   kinfitr_output_foldername = "kinfitr",
   subfolder = "Primary_Analysis",
   config_file = NULL,
@@ -18,6 +19,8 @@ launch_apps(
 \item{bids_dir}{Character string path to the BIDS directory (default: NULL)}
 
 \item{derivatives_dir}{Character string path to derivatives directory (default: bids_dir/derivatives if bids_dir provided)}
+
+\item{blood_dir}{Character string path to the blood data directory (default: NULL, for modelling app)}
 
 \item{kinfitr_output_foldername}{Character string name for kinfitr output folder within derivatives (default: "kinfitr")}
 
