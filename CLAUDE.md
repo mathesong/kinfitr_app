@@ -104,13 +104,40 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
 3. **Data Subsetting**: Filter by subject, session, tracer, etc.
 4. **Weights Definition**: Create weights for modelling
 5. **Fit delay**: Estimate the delay between the blood and tissue curves
-6. **Model Selection**: Choose between kinetic models (1TCM, 2TCM, Logan, etc.) for 3 models for comparison of outcomes
-7. **Parameter Configuration**: Set model-specific parameters and bounds
-8. **Config Generation**: Create JSON configuration files for downstream analysis
-9. **Interactive modelling:** Test model fits on individual TACs to validate specifications before full processing
-10. **State Persistence**: Automatically save and restore app configuration for seamless workflow continuation
-11. **Parameterised Reports**: Automatically generate HTML reports for each analysis step for quality control and review
-12. **Segmentation Mean TACs**: Pre-calculated volume-weighted mean TACs for external segmentations to avoid BIDS directory access during weights calculation
+6. **t* Finder**: Determine optimal start time (t*) for linear kinetic models (coming soon)
+7. **Enhanced Model Selection**: Choose between comprehensive kinetic models with full parameter configuration:
+   - **Invasive Models**: 1TCM, 2TCM, Logan, MA1 (require blood input data)
+   - **Non-invasive Models**: SRTM, refLogan, MRTM1, MRTM2 (use reference regions)
+   - **Three Model Comparison**: Configure up to 3 models simultaneously for outcome comparison
+8. **Advanced Parameter Configuration**: Set model-specific start/lower/upper bounds, fit options, and priors
+9. **Comprehensive Config Generation**: Create detailed JSON configuration files with complete model specifications
+10. **Interactive Data Exploration**: Manual data loading and visualization with model-aware plotting
+11. **State Persistence**: Automatically save and restore complete app configuration including all model parameters
+12. **Parameterised Reports**: Automatically generate HTML reports for each analysis step for quality control and review
+13. **Segmentation Mean TACs**: Pre-calculated volume-weighted mean TACs for external segmentations to avoid BIDS directory access during weights calculation
+
+### Interactive Data Exploration System
+
+The modelling app includes a dedicated Interactive tab for manual data exploration and validation:
+
+#### Workflow
+1. **Manual File Scanning**: "Scan Analysis Folder" button to populate available PET measurements and regions
+2. **Selective Data Loading**: Choose specific PET measurement, region, and model configuration
+3. **On-Demand Plotting**: "Load Data" button for controlled TAC visualization
+4. **Model Preparation**: "Fit Model" button ready for future model testing functionality
+
+#### Key Features
+- **Manual Control**: No automatic data loading - user controls when to scan and load data
+- **Pre-populated Options**: Automatically extracts available PET measurements and regions from analysis folder
+- **Model-Aware Display**: Shows which model configuration is being used for the visualization
+- **Professional Plotting**: ggplot2 with theme_light(), proper sizing (800x500px, 96 DPI) for clear display
+- **Error Handling**: Clear validation messages when required selections are missing
+
+#### Technical Implementation
+- **File Detection**: Scans for `*_desc-combinedregions_tacs.tsv` files in analysis folder
+- **Reactive Data Storage**: Uses `reactiveVal()` to store plot data independently from UI inputs
+- **Non-Reactive Plotting**: Plot only updates when Load Data button is pressed, not on dropdown changes
+- **Sidebar Layout**: Clean 1/3 controls, 2/3 plot layout for optimal user experience
 
 ### Parameterised Reports System
 
@@ -540,6 +567,19 @@ available_in_tacs <- constituent_regions[constituent_regions %in% colnames(tacs_
 region_volumes <- morph_data %>% select(name, `volume-mm3`)
 ```
 
+#### dplyr any_of() Function Syntax
+**CRITICAL**: When using `any_of()` with multiple column names, always use vector syntax:
+
+```r
+# CORRECT: Use c() to create a vector of column names
+select(-any_of(c("vB", "inpshift")))
+
+# WRONG: Multiple string arguments without c()
+select(-any_of("vB", "inpshift"))  # This will cause errors
+```
+
+This pattern is used throughout the report templates for excluding optional model parameters from output tables.
+
 ### Configuration Management
 **CRITICAL DESIGN PRINCIPLE**: When adding new functionality to the modelling app, always ensure backward compatibility with existing JSON configuration files.
 
@@ -591,11 +631,25 @@ This ensures users can seamlessly continue work with existing configurations eve
    ```
 
 ### Model Types Supported
-- **1TCM**: Single tissue compartment model with K1, k2, vB parameters
-- **2TCM**: Two tissue compartment model with K1, k2, k3, k4, vB parameters  
-- **Logan**: Logan graphical analysis with t* parameter
 
-This will eventually contain more models
+#### Invasive Models (Require Blood Input Data)
+- **1TCM**: Single tissue compartment model with K1, k2, vB parameters and bounds
+- **2TCM**: Two tissue compartment model with K1, k2, k3, k4, vB parameters and bounds
+- **Logan**: Logan graphical analysis with t* parameter and optional vB fitting
+- **MA1**: Multilinear analysis with t* parameter and optional vB fitting
+
+#### Non-Invasive Models (Use Reference Regions)
+- **SRTM**: Simplified reference tissue model with R1, k2, k2a parameters and bounds
+- **refLogan**: Reference Logan analysis with t* parameter
+- **MRTM1**: Multilinear reference tissue model with R1, k2, k2a parameters and bounds  
+- **MRTM2**: Multilinear reference tissue model 2 with R1 parameters and k2a prior value
+
+#### Model Configuration Features
+- **No Model Option**: Default selection allowing users to skip model fitting
+- **Three Simultaneous Models**: Configure Models 1, 2, and 3 for comparison studies
+- **Complete Parameter Control**: Start values, lower/upper bounds, and fit options for all parameters
+- **Flexible Model Selection**: Mix invasive and non-invasive models as needed
+- **State Persistence**: All model configurations saved and restored automatically
 
 
 ### UI Components

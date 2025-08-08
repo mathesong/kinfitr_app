@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  kinfitr-interactive:
+    build: 
+      context: ../
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3838:3838"
+    volumes:
+      # Example mounts - adjust paths as needed for testing
+      - ./test_data/bids:/data/bids_dir
+      - ./test_data/derivatives:/data/derivatives_dir
+      - ./test_data/blood:/data/blood_dir
+    command: ["--func", "modelling", "--mode", "interactive"]
+    container_name: kinfitr-interactive
+    
+  kinfitr-regiondef:
+    build: 
+      context: ../
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3839:3838"
+    volumes:
+      # Example mounts for region definition
+      - ./test_data/bids:/data/bids_dir
+    command: ["--func", "regiondef", "--mode", "interactive"]
+    container_name: kinfitr-regiondef
+    
+  kinfitr-auto-full:
+    build: 
+      context: ../
+      dockerfile: docker/Dockerfile
+    volumes:
+      # Example mounts for automatic processing
+      - ./test_data/derivatives:/data/derivatives_dir
+      - ./test_data/blood:/data/blood_dir
+    command: ["--func", "modelling", "--mode", "automatic"]
+    container_name: kinfitr-auto-full
+    
+  kinfitr-auto-step:
+    build: 
+      context: ../
+      dockerfile: docker/Dockerfile
+    volumes:
+      # Example mounts for step-specific processing
+      - ./test_data/derivatives:/data/derivatives_dir
+      - ./test_data/blood:/data/blood_dir
+    command: ["--func", "modelling", "--mode", "automatic", "--step", "weights"]
+    container_name: kinfitr-auto-step
+
+# Example usage commands:
+#
+# Interactive modelling app:
+# docker-compose up kinfitr-interactive
+# Then open http://localhost:3838
+#
+# Interactive region definition app:
+# docker-compose up kinfitr-regiondef  
+# Then open http://localhost:3839
+#
+# Automatic full pipeline:
+# docker-compose up kinfitr-auto-full
+#
+# Automatic specific step:
+# docker-compose up kinfitr-auto-step
+#
+# Build only:
+# docker-compose build
+#
+# Clean up:
+# docker-compose down --rmi all

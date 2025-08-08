@@ -159,28 +159,31 @@ tacs_files <- list.files(analysis_folder,
                       pattern = "*_desc-combinedregions_tacs.tsv",
                       recursive = TRUE)
 
+# Use unified BIDS parsing to get consistent pet identifiers
+bids_attributes <- bids_parse_files(analysis_folder)
+bids_attributes$pet <- attributes_to_title(bids_attributes)
+
 weights_tacdata <- tibble(
   filename = tacs_files) %>%
   mutate(basename = basename(filename)) %>%
   mutate(attributes = map(filename, kinfitr:::bids_filename_attributes)) %>%
   unnest(attributes) %>%
+  # Join with unified BIDS attributes to get consistent pet column
+  left_join(select(bids_attributes, -filedata)) %>%
   group_by(filename) %>% 
   select(-filename, -basename, -measurement, -desc) %>% 
   ungroup()
 
-mean_tacdata <- weights_tacdata %>%
+mean_tacdata <- weights_tacdata %>% 
   mutate(tacs = map(filename, ~read_tsv(file.path(analysis_folder, .x), show_col_types = FALSE))) %>%
+  select(-pet) %>% 
   unnest(tacs) %>%
   # Calculate volume-weighted mean across all regions for each PET measurement
-  group_by(pet, frame_start, frame_end, frame_dur, frame_mid) %>%
+  group_by(pet, frame_start, frame_end, frame_dur, frame_mid, TAC) %>% 
   summarise(
     TAC = sum(TAC * volume_mm3) / sum(volume_mm3),  # Volume-weighted mean
     .groups = "drop"
-  ) %>% 
-  # Re-extract attributes columns for matching
-  mutate(attributes = map(pet, ~kinfitr:::bids_filename_attributes(paste0(.x, "_tacs")))) %>% 
-  unnest(attributes) %>% 
-  select(-measurement)
+  )
 
 weights_tacdata <- left_join(weights_tacdata, mean_tacdata) %>% 
   select(-filename)
@@ -340,7 +343,7 @@ weights_output <- apply_weight_formula(weights_data, config$Weights$formula) %>%
 ```{r custom-weights-message, echo=create_custom_weights, eval=create_custom_weights}
 #| results: asis
 
-str_glue("Now we normalise and check for minweight issues")
+str_glue("Now we check for outlier and minweight issues")
 ```
 
 ```{r minweight-weights-custom, echo=create_custom_weights, eval=create_custom_weights}
@@ -399,6 +402,16 @@ if (as.numeric(config$Weights$method) == 0) {
                                     radionuclide_halflife = radionuclide_halflife))
   
 }
+```
+
+
+## Normalise weights to mean 1
+
+```{r normalise}
+weights_output <- weights_output %>% 
+  group_by(pet) %>% 
+  mutate(weights = weights/mean(weights)) %>% 
+  ungroup()
 ```
 
 

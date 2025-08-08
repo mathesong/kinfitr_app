@@ -11,12 +11,12 @@ params:
   blood_dir: NULL
 ---
 
-For temporary debugging, this defines temporary parameters for the parameterised report
+<!-- For temporary debugging, this defines temporary parameters for the parameterised report -->
 
-```{r}
-analysis_folder <- "/home/granville/Repositories/OpenNeuro/ds004869/derivatives/kinfitr/Primary_Analysis/"
-blood_dir <-"/home/granville/Repositories/OpenNeuro/ds004869/derivatives/bloodstream"
-```
+<!-- ```{r} -->
+<!-- analysis_folder <- "/home/granville/Repositories/OpenNeuro/ds004869/derivatives/kinfitr/Primary_Analysis/" -->
+<!-- blood_dir <-"/home/granville/Repositories/OpenNeuro/ds004869/derivatives/bloodstream" -->
+<!-- ``` -->
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -25,6 +25,8 @@ library(kinfitr)
 library(knitr)
 library(jsonlite)
 library(glue)
+library(DT)
+
 theme_set(theme_light())
 
 theme_set(theme_light())
@@ -68,8 +70,8 @@ if (!is.null(config$FitDelay)) {
   # cat("**Blood Data Source:** ", blood_dir, "\n\n")
   
   # Method mapping for display
-  method_display <- switch(delay_config$model %||% "zero",
-    "zero" = "Set to zero (no delay fitting)",
+  method_display <- switch(delay_config$model %||% "none",
+    "none" = "None (no delay fitting)",
     # "lin2tcm_singletac" = "Linear 2TCM Profile from Single Representative TAC (Very Quick)",
     "1tcm_singletac" = "1TCM Delay from Single Representative TAC (Quick)", 
     "2tcm_singletac" = "2TCM Delay from Single Representative TAC (Less Quick)",
@@ -116,11 +118,14 @@ if (!is.null(config$FitDelay)) {
 
 ```{r setup-conditions, echo=FALSE}
 # Set up conditional execution based on delay method
-delay_method <- config$FitDelay$model %||% "zero"
+delay_method <- config$FitDelay$model %||% "none"
 
-do_zero_delay <- delay_method == "zero"
-fit_delay <- !do_zero_delay
-# do_lin2tcm_singletac <- delay_method == "lin2tcm_singletac"
+# Exit early if no delay fitting is requested
+if (delay_method == "none") {
+  cat("No delay estimation requested. This report should not have been generated.")
+  knitr::knit_exit()
+}
+
 do_1tcm_singletac <- delay_method == "1tcm_singletac"
 do_2tcm_singletac <- delay_method == "2tcm_singletac" 
 do_1tcm_median <- delay_method == "1tcm_median"
@@ -355,56 +360,6 @@ model_data <- inner_join(tac_data_nested, blood_data) %>%
 
 # Delay Estimation
 
-```{r, eval=do_zero_delay, echo=do_zero_delay, results='asis'}
-str_glue("## Zero Delay (No Fitting)")
-```
-
-```{r, eval=do_zero_delay, echo=do_zero_delay}
-# Zero delay implementation
-# All delays are set to zero - no estimation required
-
-delay_res <- model_data %>% 
-  mutate(inpshift = 0) %>% 
-  select(-tacs, -input) %>% 
-  ungroup()
-```
-
-```{r, eval=do_zero_delay, echo=do_zero_delay, results='asis'}
-str_glue("## Saving Outcomes")
-```
-
-```{r, eval=do_zero_delay, echo=do_zero_delay}
-delay_res <- delay_res %>% 
-  mutate(filename = paste0(output_stem, "_auxkinpar.json"))
-
-save_inpshift <- function(inpshift, method, filename) {
-  out <- list(
-    blood_timeshift = list(
-      Value = inpshift,
-      Method = method
-    ))
-  json_output <- jsonlite::toJSON(out, pretty = TRUE, auto_unbox = TRUE)
-  writeLines(json_output, filename)
-}
-
-pwalk(list(delay_res$inpshift, 
-           method_display, 
-           paste0(analysis_folder, "/", delay_res$filename)),
-      save_inpshift)
-```
-
-```{r, eval=do_zero_delay, echo=do_zero_delay, results='asis'}
-str_glue("# Session Information")
-```
-
-```{r, eval=do_zero_delay, echo=do_zero_delay}
-sessionInfo()
-```
-
-```{r, eval=do_zero_delay, echo=do_zero_delay}
-knit_exit()
-```
-
 
 <!-- ## Linear 2TCM Profile from Single Representative TAC -->
 
@@ -424,7 +379,7 @@ knit_exit()
 <!--                                  vB =  if(fit_vB) vB_value else NULL, -->
 <!--                                  timeStartEnd = c(0,time_window))))  -->
 
-<!-- delay_res <- model_data %>%  -->
+<!-- delay_out <- model_data %>%  -->
 <!--   mutate(inpshift = map_dbl(delayFit, c("par", "inpshift"))) %>%  -->
 <!--   select(-delayFit, -tacs, -input) %>%  -->
 <!--   ungroup() -->
@@ -579,20 +534,6 @@ delay_out <- delay_estimates %>%
   summarise(inpshift = median(inpshift))
 ```
 
-```{r, eval=is_multiple_regions, echo=is_multiple_regions}
-delay_estimates <- model_data %>% 
-  ungroup() %>% 
-  mutate(inpshift = map_dbl(delayFit, ~{
-    if(!is.list(.x)) NA_real_ else .x$par$inpshift
-  })) %>% 
-  select(-delayFit, -tacs, -input)
-
-delay_out <- delay_estimates %>% 
-  group_by(across(intersect(colnames(.), c("sub", "ses", "trc", "rec", "task", 
-                                           "run", "pet",
-                                           "output_stem")))) %>% 
-  summarise(inpshift = median(inpshift))
-```
 
 ```{r, results='asis'}
 str_glue("Delay values estimated for {sum(!is.na(delay_out$inpshift))} / {nrow(delay_out)} ({round(100*(sum(!is.na(delay_out$inpshift))/ nrow(delay_out)))}%) of measurements.
@@ -607,7 +548,8 @@ delay_out %>%
   ungroup() %>% 
   arrange(inpshift) %>% 
   select(pet, blood_timeshift = inpshift) %>% 
-  kable(digits = 2)
+  mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
+  DT::datatable()
 ```
 
 
@@ -790,31 +732,37 @@ walk(histograms$plot, print)
 # Saving Outcomes
 
 ```{r}
-delay_res <- delay_res %>% 
-  mutate(filename = paste0(output_stem, "_auxkinpar.json"))
+ModelName = str_match(method_display, "^(\\w*) ")[,2]
 
-save_inpshift <- function(inpshift, method, filename) {
-  out <- list(
-    blood_timeshift = list(
-      Value = inpshift,
-      Method = method
-    ))
-  json_output <- jsonlite::toJSON(out, pretty = TRUE, auto_unbox = TRUE)
-  writeLines(json_output, filename)
+delay_out <- delay_out %>% 
+  mutate(filename = paste0(output_stem, 
+                           "_model-", ModelName,
+                           "_desc-delayfit",
+                           "_kinpar.tsv"))
+
+save_inpshift <- function(inpshift, filename) {
+  
+  out_tsv <- tibble(
+    blood_timeshift = inpshift)
+  
+  write_tsv(out_tsv, filename)
+  
+  json_filename <- str_replace(filename, pattern = ".tsv", ".json")
+  
+  json_output <- list(
+    Description = method_display,
+    ModelName = ModelName,
+    AdditionalModelDetails = str_glue("vB fitted: {config_items$`Fit vB Parameter`}")
+  )
+    
+    json_output <- jsonlite::toJSON(json_output, pretty = TRUE, auto_unbox = TRUE)
+    writeLines(json_output, json_filename)
 }
 
-pwalk(list(delay_res$inpshift, 
-           method_display, 
-           paste0(analysis_folder, "/", delay_res$filename)),
+walk2(delay_out$inpshift, 
+      paste0(analysis_folder, "/", delay_out$filename),
       save_inpshift)
 ```
-
-
-
-
-# Blood Data Source Details
-
-
 
 
 # Session Information

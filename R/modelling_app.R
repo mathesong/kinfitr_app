@@ -142,7 +142,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
   ui <- fluidPage(theme = shinythemes::shinytheme("flatly"),
     
     # App title ----
-    titlePanel("Kinetic Modelling Configuration"),
+    titlePanel("kinfitr Kinetic Modelling Configuration"),
     
     # Tab panel for all options ----
     tabsetPanel(type = "tabs",
@@ -339,7 +339,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                    column(6,
                                      h4("Delay Estimation Approach"),
                                      selectInput("delay_model", "",
-                                                choices = c("Set to zero (i.e. no delay fitting to be performed)" = "zero",
+                                                choices = c("None (no delay fitting)" = "none",
                                                           # "Linear 2TCM Profile from Single Representative TAC (Very Quick)" = "lin2tcm_singletac",
                                                           "1TCM Delay from Single Representative TAC (Quick)" = "1tcm_singletac",
                                                           "2TCM Delay from Single Representative TAC (Less Quick)" = "2tcm_singletac",
@@ -403,26 +403,47 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              hr(),
                              actionButton("run_delay", "▶ Estimate Delay", class = "btn-success btn-lg")
                     ),
+                    # Tab panel for tstar ----
+                    tabPanel("Find t*",
+                             br(),
+                             # h4("t* Finder"),
+                             p("This functionality is coming soon.", 
+                               style = "font-size:16px; font-weight:bold; color:#0066cc; margin-bottom:20px;"),
+                             p("The t* finder helps determine the optimal start time (t*) for linear kinetic models by analyzing when equilibrium conditions are met.",
+                               style = "font-size:14px; margin-bottom:20px;"),
+                             
+                             selectInput("tstar_model", "Select a model for determining t*:",
+                                         choices = c("No Model Selected" = "none",
+                                                     "Logan (Invasive)" = "Logan",
+                                                     "MA1 (Invasive)" = "MA1",
+                                                     "refLogan (Non-invasive)" = "refLogan",
+                                                     "MRTM1 (Non-invasive)" = "MRTM1",
+                                                     "MRTM2 (Non-invasive)" = "MRTM2"),
+                                         selected = "none",
+                                         width = "60%")
+                    ),
+                    # Tab panel for Model 1 ----
                     tabPanel("Model 1",
                              h4(""),
-                             p(glue::glue("There are not so many common models for the BPR. ",
-                                    "When the BPR is clearly constant or linear, use ",
-                                    "the relevant option. ",
-                                    "For most tracers, with a more complex function, ",
-                                    "a good default option is the ",
-                                    "`Fit Individually: GAM` option, ",
-                                    "which will fit a smooth generalised additive model ",
-                                    "to each curve independently. ",
-                                    "Hierarchical models are best left for experienced users.  ")
+                             p(glue::glue("Choose a kinetic model for fitting. ",
+                                    "Invasive models require blood input data, while non-invasive models ",
+                                    "use reference region approaches. Linear models are faster and tend to be ",
+                                    "more robust to measurement error, however they provide fewer outcome parameters ",
+                                    "and can be slightly biased. Non-linear models fit full compartment models.")
                              ),
                              # Model selection drop-down menu
                              selectInput("button", "Select a model:",
-                                         choices = c("1TCM",
-                                                     "2TCM",
-                                                     "Logan",
-                                                     "Fit Delay",
-                                                     "t* finder"
-                                         )),
+                                         choices = c("No Model 1" = "none",
+                                                     "1TCM (Invasive, Non-linear)" = "1TCM",
+                                                     "2TCM (Invasive, Non-linear)" = "2TCM",
+                                                     "Logan (Invasive, Linear)" = "Logan",
+                                                     "MA1 (Invasive, Linear)" = "MA1",
+                                                     "SRTM (Non-invasive, Non-linear)" = "SRTM",
+                                                     "refLogan (Non-invasive, Linear)" = "refLogan",
+                                                     "MRTM1 (Non-invasive, Linear)" = "MRTM1",
+                                                     "MRTM2 (Non-invasive, Linear)" = "MRTM2"
+                                         ),
+                                         selected = "none"),
                              # 1TCM selection panel
                              conditionalPanel(
                                condition = "input.button == '1TCM'",
@@ -441,8 +462,24 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(3, offset = 0, numericInput("vB.lower", "vB.lower", value = 0.01, min = 0, step=.001)),
                                  column(3, offset = 0, numericInput("vB.upper", "vB.upper", value = 0.1, min = 0, step=.001)),
                                ),
-                               checkboxInput("vB.fit", "Fit vB (otherwise use vB.start)", value = FALSE),
+                               checkboxInput("vB.fit", "Fit vB (otherwise use vB.start)", value = TRUE),
                                
+                               # Time/Frame Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
+                               ),
+                               
+                               # Multstart Options
+                               h4("Multiple Starting Points"),
+                               p("Fit model multiple times with different starting parameters to avoid local minima."),
+                               numericInput("multstart_iter", "Number of Iterations", value = 1, min = 1, max = 50, step = 1),
                                
                              ),
                              # 2TCM selection panel
@@ -473,45 +510,144 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(3, offset = 0, numericInput("vB.lower", "vB.lower", value = 0.01, min = 0, step=.001)),
                                  column(3, offset = 0, numericInput("vB.upper", "vB.upper", value = 0.1, min = 0, step=.001)),
                                ),
-                               checkboxInput("vB.fit", "Fit vB (otherwise use vB.start)", value = FALSE)
+                               checkboxInput("vB.fit", "Fit vB (otherwise use vB.start)", value = TRUE),
+                               
+                               # Time/Frame Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
+                               ),
+                               
+                               # Multstart Options
+                               h4("Multiple Starting Points"),
+                               p("Fit model multiple times with different starting parameters to avoid local minima."),
+                               numericInput("multstart_iter", "Number of Iterations", value = 1, min = 1, max = 50, step = 1),
+                               
                              ),
                              # Logan selection panel
                              conditionalPanel(
                                condition = "input.button == 'Logan'",
                                numericInput("tstarIncludedFrames", "tstar", value = 10),
-                               checkboxInput("vB.fit", "Fit vB", value = FALSE)
+                               selectInput("vB_source", "vB Parameter Source:",
+                                          choices = list("Set vB" = "set"),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.vB_source == 'set'",
+                                 numericInput("vB_value", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               )
                              ),
                              
-                             # t* finder
+                             # MA1 selection panel
                              conditionalPanel(
-                               condition = "input.button == 't* finder'",
-                               textInput(
-                                 inputId = "binding_regions", label = "Low-, medium- and high-binding regions", value = ""),
+                               condition = "input.button == 'MA1'",
+                               numericInput("tstarIncludedFrames", "tstar", value = 10),
+                               selectInput("vB_source", "vB Parameter Source:",
+                                          choices = list("Set vB" = "set"),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.vB_source == 'set'",
+                                 numericInput("vB_value", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               )
+                             ),
+                             
+                             # SRTM selection panel
+                             conditionalPanel(
+                               condition = "input.button == 'SRTM'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2.start", "k2.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.lower", "k2.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.upper", "k2.upper", value = 0.5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2a.start", "k2a.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.lower", "k2a.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.upper", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                               )
+                             ),
+                             
+                             # refLogan selection panel  
+                             conditionalPanel(
+                               condition = "input.button == 'refLogan'",
+                               numericInput("tstarIncludedFrames", "tstar", value = 10),
+                               selectInput("k2prime_source", "k2' Parameter Source:",
+                                          choices = list("Set k2'" = "set"),
+                                          selected = "set"),
+                               numericInput("k2prime_value", "k2' Value", value = 0.1, min = 0, step = 0.001)
+                             ),
+                             
+                             # MRTM1 selection panel
+                             conditionalPanel(
+                               condition = "input.button == 'MRTM1'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2.start", "k2.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.lower", "k2.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.upper", "k2.upper", value = 0.5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2a.start", "k2a.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.lower", "k2a.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.upper", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                               )
+                             ),
+                             
+                             # MRTM2 selection panel
+                             conditionalPanel(
+                               condition = "input.button == 'MRTM2'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               selectInput("k2prime_source", "k2' Parameter Source:",
+                                          choices = list("Set k2'" = "set"),
+                                          selected = "set"),
+                               numericInput("k2prime_value", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
                              ),
                              
                              hr(),
-                             actionButton("run_model1", "▶ Fit Model 1", class = "btn-success btn-lg")
+                             conditionalPanel(
+                               condition = "input.button != 'none'",
+                               actionButton("run_model1", "▶ Fit Model 1", class = "btn-success btn-lg")
+                             )
                     ),
+                    # Tab panel for Model 2 ----
                     tabPanel("Model 2",
                              h4("Model 2"),
-                             p(glue::glue("There are not so many common models for the BPR. ",
-                                    "When the BPR is clearly constant or linear, use ",
-                                    "the relevant option. ",
-                                    "For most tracers, with a more complex function, ",
-                                    "a good default option is the ",
-                                    "`Fit Individually: GAM` option, ",
-                                    "which will fit a smooth generalised additive model ",
-                                    "to each curve independently. ",
-                                    "Hierarchical models are best left for experienced users.  ")
+                             p(glue::glue("Choose a kinetic model for fitting. ",
+                                    "Invasive models require blood input data, while non-invasive models ",
+                                    "use reference region approaches. Linear models are faster and tend to be ",
+                                    "more robust to measurement error, however they provide fewer outcome parameters ",
+                                    "and can be slightly biased. Non-linear models fit full compartment models.")
                              ),
                              # Model selection drop-down menu
                              selectInput("button2", "Select a model:",
-                                         choices = c("1TCM",
-                                                     "2TCM",
-                                                     "Logan",
-                                                     "Fit Delay",
-                                                     "t* finder"
-                                         )),
+                                         choices = c("No Model 2" = "none",
+                                                     "1TCM (Invasive, Non-linear)" = "1TCM",
+                                                     "2TCM (Invasive, Non-linear)" = "2TCM",
+                                                     "Logan (Invasive, Linear)" = "Logan",
+                                                     "MA1 (Invasive, Linear)" = "MA1",
+                                                     "SRTM (Non-invasive, Non-linear)" = "SRTM",
+                                                     "refLogan (Non-invasive, Linear)" = "refLogan",
+                                                     "MRTM1 (Non-invasive, Linear)" = "MRTM1",
+                                                     "MRTM2 (Non-invasive, Linear)" = "MRTM2"
+                                         ),
+                                         selected = "none"),
                              # 1TCM selection panel
                              conditionalPanel(
                                condition = "input.button2 == '1TCM'",
@@ -530,7 +666,33 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(3, offset = 0, numericInput("vB.lower2", "vB.lower", value = 0.01, min = 0, step=.001)),
                                  column(3, offset = 0, numericInput("vB.upper2", "vB.upper", value = 0.1, min = 0, step=.001)),
                                ),
-                               checkboxInput("vB.fit2", "Fit vB (otherwise use vB.start)", value = FALSE),
+                               selectInput("vB_source2", "vB Parameter Source:",
+                                          choices = list(
+                                            "Fit vB" = "fit",
+                                            "Set vB (uses vB.start)" = "set",
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median"
+                                          ),
+                                          selected = "fit"),
+                               
+                               # Time/Frame Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
+                               ),
+                               
+                               # Multstart Options
+                               h4("Multiple Starting Points"),
+                               p("Fit model multiple times with different starting parameters to avoid local minima."),
+                               numericInput("multstart_iter2", "Number of Iterations", value = 1, min = 1, max = 50, step = 1),
+                               
                              ),
                              # 2TCM selection panel
                              conditionalPanel(
@@ -560,44 +722,177 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(3, offset = 0, numericInput("vB.lower2", "vB.lower", value = 0.01, min = 0, step=.001)),
                                  column(3, offset = 0, numericInput("vB.upper2", "vB.upper", value = 0.1, min = 0, step=.001)),
                                ),
-                               checkboxInput("vB.fit2", "Fit vB (otherwise use vB.start)", value = FALSE)
+                               selectInput("vB_source2", "vB Parameter Source:",
+                                          choices = list(
+                                            "Fit vB" = "fit",
+                                            "Set vB (uses vB.start)" = "set",
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median"
+                                          ),
+                                          selected = "fit"),
+                               
+                               # Time/Frame Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
+                               ),
+                               
+                               # Multstart Options
+                               h4("Multiple Starting Points"),
+                               p("Fit model multiple times with different starting parameters to avoid local minima."),
+                               numericInput("multstart_iter2", "Number of Iterations", value = 1, min = 1, max = 50, step = 1),
+                               
                              ),
                              # Logan selection panel
                              conditionalPanel(
                                condition = "input.button2 == 'Logan'",
                                numericInput("tstarIncludedFrames2", "tstar", value = 10),
-                               checkboxInput("vB.fit2", "Fit vB", value = FALSE)
+                               selectInput("vB_source2", "vB Parameter Source:",
+                                          choices = list(
+                                            "Set vB" = "set",
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.vB_source2 == 'set'",
+                                 numericInput("vB_value2", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               )
                              ),
-                             # t* finder
+                             # MA1 selection panel
                              conditionalPanel(
-                               condition = "input.button2 == 't* finder'",
-                               textInput(
-                                 inputId = "binding_regions2", label = "Low-, medium- and high-binding regions", value = ""),
+                               condition = "input.button2 == 'MA1'",
+                               numericInput("tstarIncludedFrames2", "tstar", value = 10),
+                               selectInput("vB_source2", "vB Parameter Source:",
+                                          choices = list(
+                                            "Set vB" = "set",
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.vB_source2 == 'set'",
+                                 numericInput("vB_value2", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               )
+                             ),
+                             
+                             # SRTM selection panel
+                             conditionalPanel(
+                               condition = "input.button2 == 'SRTM'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start2", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower2", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper2", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2.start2", "k2.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.lower2", "k2.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.upper2", "k2.upper", value = 0.5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2a.start2", "k2a.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.lower2", "k2a.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.upper2", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                               )
+                             ),
+                             
+                             # refLogan selection panel  
+                             conditionalPanel(
+                               condition = "input.button2 == 'refLogan'",
+                               numericInput("tstarIncludedFrames2", "tstar", value = 10),
+                               selectInput("k2prime_source2", "k2' Parameter Source:",
+                                          choices = list(
+                                            "Set k2'" = "set",
+                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.k2prime_source2 == 'set'",
+                                 numericInput("k2prime_value2", "k2' Value", value = 0.1, min = 0, step = 0.001)
+                               )
+                             ),
+                             
+                             # MRTM1 selection panel
+                             conditionalPanel(
+                               condition = "input.button2 == 'MRTM1'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start2", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower2", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper2", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2.start2", "k2.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.lower2", "k2.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.upper2", "k2.upper", value = 0.5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2a.start2", "k2a.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.lower2", "k2a.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.upper2", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                               )
+                             ),
+                             
+                             # MRTM2 selection panel
+                             conditionalPanel(
+                               condition = "input.button2 == 'MRTM2'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start2", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower2", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper2", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               selectInput("k2prime_source2", "k2' Parameter Source:",
+                                          choices = list(
+                                            "Set k2'" = "set",
+                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.k2prime_source2 == 'set'",
+                                 numericInput("k2prime_value2", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
+                               )
                              ),
                              
                              hr(),
-                             actionButton("run_model2", "▶ Fit Model 2", class = "btn-success btn-lg")
+                             conditionalPanel(
+                               condition = "input.button2 != 'none'",
+                               actionButton("run_model2", "▶ Fit Model 2", class = "btn-success btn-lg")
+                             )
                     ),
+                    # Tab panel for Model 3 ----
                     tabPanel("Model 3",
                              h4("Model 3"),
-                             p(glue::glue("There are not so many common models for the BPR. ",
-                                    "When the BPR is clearly constant or linear, use ",
-                                    "the relevant option. ",
-                                    "For most tracers, with a more complex function, ",
-                                    "a good default option is the ",
-                                    "`Fit Individually: GAM` option, ",
-                                    "which will fit a smooth generalised additive model ",
-                                    "to each curve independently. ",
-                                    "Hierarchical models are best left for experienced users.  ")
+                             p(glue::glue("Choose a kinetic model for fitting. ",
+                                    "Invasive models require blood input data, while non-invasive models ",
+                                    "use reference region approaches. Linear models are faster and tend to be ",
+                                    "more robust to measurement error, however they provide fewer outcome parameters ",
+                                    "and can be slightly biased. Non-linear models fit full compartment models.")
                              ),
                              # Model selection drop-down menu
                              selectInput("button3", "Select a model:",
-                                         choices = c("1TCM",
-                                                     "2TCM",
-                                                     "Logan",
-                                                     "Fit Delay",
-                                                     "t* finder"
-                                         )),
+                                         choices = c("No Model 3" = "none",
+                                                     "1TCM (Invasive, Non-linear)" = "1TCM",
+                                                     "2TCM (Invasive, Non-linear)" = "2TCM",
+                                                     "Logan (Invasive, Linear)" = "Logan",
+                                                     "MA1 (Invasive, Linear)" = "MA1",
+                                                     "SRTM (Non-invasive, Non-linear)" = "SRTM",
+                                                     "refLogan (Non-invasive, Linear)" = "refLogan",
+                                                     "MRTM1 (Non-invasive, Linear)" = "MRTM1",
+                                                     "MRTM2 (Non-invasive, Linear)" = "MRTM2"
+                                         ),
+                                         selected = "none"),
                              # 1TCM selection panel
                              conditionalPanel(
                                condition = "input.button3 == '1TCM'",
@@ -616,7 +911,36 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(3, offset = 0, numericInput("vB.lower3", "vB.lower", value = 0.01, min = 0, step=.001)),
                                  column(3, offset = 0, numericInput("vB.upper3", "vB.upper", value = 0.1, min = 0, step=.001)),
                                ),
-                               checkboxInput("vB.fit3", "Fit vB (otherwise use vB.start)", value = FALSE),
+                               selectInput("vB_source3", "vB Parameter Source:",
+                                          choices = list(
+                                            "Fit vB" = "fit",
+                                            "Set vB (uses vB.start)" = "set", 
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median",
+                                            "Inherit vB from Model 2 (Regional)" = "inherit_model2_regional",
+                                            "Inherit vB from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
+                                            "Inherit vB from Model 2 (Median Across Regions)" = "inherit_model2_median"
+                                          ),
+                                          selected = "fit"),
+                               
+                               # Time/Frame Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
+                               ),
+                               
+                               # Multstart Options
+                               h4("Multiple Starting Points"),
+                               p("Fit model multiple times with different starting parameters to avoid local minima."),
+                               numericInput("multstart_iter3", "Number of Iterations", value = 1, min = 1, max = 50, step = 1),
+                               
                              ),
                              # 2TCM selection panel
                              conditionalPanel(
@@ -646,33 +970,171 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(3, offset = 0, numericInput("vB.lower3", "vB.lower", value = 0.01, min = 0, step=.001)),
                                  column(3, offset = 0, numericInput("vB.upper3", "vB.upper", value = 0.1, min = 0, step=.001)),
                                ),
-                               checkboxInput("vB.fit3", "Fit vB (otherwise use vB.start)", value = FALSE)
+                               selectInput("vB_source3", "vB Parameter Source:",
+                                          choices = list(
+                                            "Fit vB" = "fit",
+                                            "Set vB (uses vB.start)" = "set", 
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median",
+                                            "Inherit vB from Model 2 (Regional)" = "inherit_model2_regional",
+                                            "Inherit vB from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
+                                            "Inherit vB from Model 2 (Median Across Regions)" = "inherit_model2_median"
+                                          ),
+                                          selected = "fit"),
+                               
+                               # Time/Frame Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
+                               ),
+                               
+                               # Multstart Options
+                               h4("Multiple Starting Points"),
+                               p("Fit model multiple times with different starting parameters to avoid local minima."),
+                               numericInput("multstart_iter3", "Number of Iterations", value = 1, min = 1, max = 50, step = 1),
+                               
                              ),
                              # Logan selection panel
                              conditionalPanel(
                                condition = "input.button3 == 'Logan'",
                                numericInput("tstarIncludedFrames3", "tstar", value = 10),
-                               checkboxInput("vB.fit3", "Fit vB", value = FALSE)
+                               selectInput("vB_source3", "vB Parameter Source:",
+                                          choices = list(
+                                            "Set vB" = "set",
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median",
+                                            "Inherit vB from Model 2 (Regional)" = "inherit_model2_regional",
+                                            "Inherit vB from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
+                                            "Inherit vB from Model 2 (Median Across Regions)" = "inherit_model2_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.vB_source3 == 'set'",
+                                 numericInput("vB_value3", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               )
                              ),
-                             # t* finder
+                             # MA1 selection panel
                              conditionalPanel(
-                               condition = "input.button3 == 't* finder'",
-                               textInput(
-                                 inputId = "binding_regions3", label = "Low-, medium- and high-binding regions", value = ""),
+                               condition = "input.button3 == 'MA1'",
+                               numericInput("tstarIncludedFrames3", "tstar", value = 10),
+                               selectInput("vB_source3", "vB Parameter Source:",
+                                          choices = list(
+                                            "Set vB" = "set",
+                                            "Inherit vB from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit vB from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit vB from Model 1 (Median Across Regions)" = "inherit_model1_median",
+                                            "Inherit vB from Model 2 (Regional)" = "inherit_model2_regional",
+                                            "Inherit vB from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
+                                            "Inherit vB from Model 2 (Median Across Regions)" = "inherit_model2_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.vB_source3 == 'set'",
+                                 numericInput("vB_value3", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               )
+                             ),
+                             
+                             # SRTM selection panel
+                             conditionalPanel(
+                               condition = "input.button3 == 'SRTM'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start3", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower3", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper3", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2.start3", "k2.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.lower3", "k2.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.upper3", "k2.upper", value = 0.5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2a.start3", "k2a.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.lower3", "k2a.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.upper3", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                               )
+                             ),
+                             
+                             # refLogan selection panel  
+                             conditionalPanel(
+                               condition = "input.button3 == 'refLogan'",
+                               numericInput("tstarIncludedFrames3", "tstar", value = 10),
+                               selectInput("k2prime_source3", "k2' Parameter Source:",
+                                          choices = list(
+                                            "Set k2'" = "set",
+                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median",
+                                            "Inherit k2' from Model 2 (Regional)" = "inherit_model2_regional",
+                                            "Inherit k2' from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
+                                            "Inherit k2' from Model 2 (Median Across Regions)" = "inherit_model2_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.k2prime_source3 == 'set'",
+                                 numericInput("k2prime_value3", "k2' Value", value = 0.1, min = 0, step = 0.001)
+                               )
+                             ),
+                             
+                             # MRTM1 selection panel
+                             conditionalPanel(
+                               condition = "input.button3 == 'MRTM1'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start3", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower3", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper3", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2.start3", "k2.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.lower3", "k2.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2.upper3", "k2.upper", value = 0.5,min = 0, step=.001)),
+                               ),
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("k2a.start3", "k2a.start", value = 0.1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.lower3", "k2a.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("k2a.upper3", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                               )
+                             ),
+                             
+                             # MRTM2 selection panel
+                             conditionalPanel(
+                               condition = "input.button3 == 'MRTM2'",
+                               fluidRow(
+                                 column(3, offset = 0, numericInput("R1.start3", "R1.start", value = 1,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.lower3", "R1.lower", value = 0.0001,min = 0, step=.001)),
+                                 column(3, offset = 0, numericInput("R1.upper3", "R1.upper", value = 5,min = 0, step=.001)),
+                               ),
+                               selectInput("k2prime_source3", "k2' Parameter Source:",
+                                          choices = list(
+                                            "Set k2'" = "set",
+                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
+                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
+                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median",
+                                            "Inherit k2' from Model 2 (Regional)" = "inherit_model2_regional",
+                                            "Inherit k2' from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
+                                            "Inherit k2' from Model 2 (Median Across Regions)" = "inherit_model2_median"
+                                          ),
+                                          selected = "set"),
+                               conditionalPanel(
+                                 condition = "input.k2prime_source3 == 'set'",
+                                 numericInput("k2prime_value3", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
+                               )
                              ),
                              
                              hr(),
-                             actionButton("run_model3", "▶ Fit Model 3", class = "btn-success btn-lg")
+                             conditionalPanel(
+                               condition = "input.button3 != 'none'",
+                               actionButton("run_model3", "▶ Fit Model 3", class = "btn-success btn-lg")
+                             )
                     ),
-                    tabPanel("Interactive",
-                             h4("Interactive Modeling"),
-                             p("Fit models interactively with reactive figures and parameters"),
-                             br(),
-                             h5("Content coming soon..."),
-                             
-                             hr(),
-                             actionButton("run_interactive", "▶ Launch Interactive Mode", class = "btn-success btn-lg")
-                    ),
+                    # Tab panel for Config Preview ----
                     tabPanel("Preview Configuration",
                              br(),
                              h4("Configuration Settings"),
@@ -700,6 +1162,59 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              verbatimTextOutput("json_preview"),
                              
                              br()
+                    ),
+                # Tab panel for Interactive ----
+                    tabPanel("Interactive Sandbox",
+                             br(),
+                             h4("Interactive Data Exploration"),
+                             p("Load and visualize individual TAC data for quality control and exploration.",
+                               style = "font-size:14px; margin-bottom:20px;"),
+                             
+                             # Sidebar layout
+                             fluidRow(
+                               # Left sidebar - Controls
+                               column(4,
+                                 wellPanel(
+                                   h5("Data Selection"),
+                                   
+                                   actionButton("scan_folder", "🔍 Scan Analysis Folder", class = "btn-info btn-sm", width = "100%"),
+                                   p("This populates the menus below with available data files.", 
+                                     style = "font-size: 11px; color: #666; margin-top: 5px; margin-bottom: 15px;"),
+                                   
+                                   selectInput("interactive_pet", "PET Measurement:",
+                                             choices = c("Run 'Scan Analysis Folder' first" = "none"),
+                                             selected = "none",
+                                             width = "100%"),
+                                   
+                                   selectInput("interactive_region", "Region:",
+                                             choices = c("Run 'Scan Analysis Folder' first" = "none"),
+                                             selected = "none", 
+                                             width = "100%"),
+                                   
+                                   selectInput("interactive_model", "Model:",
+                                             choices = c("None" = "none",
+                                                         "Model 1" = "model1",
+                                                         "Model 2" = "model2", 
+                                                         "Model 3" = "model3"),
+                                             selected = "model1",
+                                             width = "100%"),
+                                   
+                                   hr(),
+                                   actionButton("load_data", "▶ Load Data", class = "btn-success btn-lg", width = "100%"),
+                                   br(), br(),
+                                   actionButton("fit_model", "▶ Fit Model", class = "btn-success btn-lg", width = "100%")
+                                 )
+                               ),
+                               
+                               # Right main area - Plot
+                               column(8,
+                                 conditionalPanel(
+                                   condition = "input.load_data > 0",
+                                   # h5("Time Activity Curve"),
+                                   plotOutput("tac_plot", height = "500px")
+                                 )
+                               )
+                             )
                     )
         )
   )
@@ -727,19 +1242,164 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
           updateTextInput(session, "subset_regions", value = existing_config$Subsetting$Regions %||% "")
         }
         
+        # Helper function to restore model parameters
+        restore_model_params <- function(model_config, suffix = "") {
+          if (is.null(model_config)) return()
+          
+          model_type <- model_config$type
+          
+          # Restore parameters based on model type
+          if (!is.null(model_type) && model_type == "1TCM") {
+            if (!is.null(model_config$K1)) {
+              updateNumericInput(session, paste0("K1.start", suffix), value = model_config$K1$start %||% 0.1)
+              updateNumericInput(session, paste0("K1.lower", suffix), value = model_config$K1$lower %||% 0.0001)
+              updateNumericInput(session, paste0("K1.upper", suffix), value = model_config$K1$upper %||% 0.5)
+            }
+            if (!is.null(model_config$k2)) {
+              updateNumericInput(session, paste0("k2.start", suffix), value = model_config$k2$start %||% 0.1)
+              updateNumericInput(session, paste0("k2.lower", suffix), value = model_config$k2$lower %||% 0.0001)
+              updateNumericInput(session, paste0("k2.upper", suffix), value = model_config$k2$upper %||% 0.5)
+            }
+            if (!is.null(model_config$vB)) {
+              updateNumericInput(session, paste0("vB.start", suffix), value = model_config$vB$start %||% 0.05)
+              updateNumericInput(session, paste0("vB.lower", suffix), value = model_config$vB$lower %||% 0.01)
+              updateNumericInput(session, paste0("vB.upper", suffix), value = model_config$vB$upper %||% 0.1)
+              
+              # Handle vB parameter restoration based on model number (suffix)
+              if (suffix == "") {
+                # Model 1 uses old checkbox system
+                updateCheckboxInput(session, paste0("vB.fit", suffix), value = model_config$vB$fit %||% TRUE)
+              } else {
+                # Models 2 and 3 use new inheritance system
+                if (!is.null(model_config$vB_source)) {
+                  updateSelectInput(session, paste0("vB_source", suffix), selected = model_config$vB_source %||% "fit")
+                } else if (!is.null(model_config$vB$fit)) {
+                  # Backward compatibility: convert old fit boolean to new vB_source
+                  vB_source_value <- if (model_config$vB$fit) "fit" else "set"
+                  updateSelectInput(session, paste0("vB_source", suffix), selected = vB_source_value)
+                }
+              }
+            }
+          } else if (!is.null(model_type) && model_type == "2TCM") {
+            # Similar parameter restoration for 2TCM (K1, k2, k3, k4, vB)
+            if (!is.null(model_config$K1)) {
+              updateNumericInput(session, paste0("K1.start", suffix), value = model_config$K1$start %||% 0.1)
+              updateNumericInput(session, paste0("K1.lower", suffix), value = model_config$K1$lower %||% 0.0001)
+              updateNumericInput(session, paste0("K1.upper", suffix), value = model_config$K1$upper %||% 0.5)
+            }
+            if (!is.null(model_config$k2)) {
+              updateNumericInput(session, paste0("k2.start", suffix), value = model_config$k2$start %||% 0.1)
+              updateNumericInput(session, paste0("k2.lower", suffix), value = model_config$k2$lower %||% 0.0001)
+              updateNumericInput(session, paste0("k2.upper", suffix), value = model_config$k2$upper %||% 0.5)
+            }
+            if (!is.null(model_config$k3)) {
+              updateNumericInput(session, paste0("k3.start", suffix), value = model_config$k3$start %||% 0.1)
+              updateNumericInput(session, paste0("k3.lower", suffix), value = model_config$k3$lower %||% 0.0001)
+              updateNumericInput(session, paste0("k3.upper", suffix), value = model_config$k3$upper %||% 0.5)
+            }
+            if (!is.null(model_config$k4)) {
+              updateNumericInput(session, paste0("k4.start", suffix), value = model_config$k4$start %||% 0.1)
+              updateNumericInput(session, paste0("k4.lower", suffix), value = model_config$k4$lower %||% 0.0001)
+              updateNumericInput(session, paste0("k4.upper", suffix), value = model_config$k4$upper %||% 0.5)
+            }
+            if (!is.null(model_config$vB)) {
+              updateNumericInput(session, paste0("vB.start", suffix), value = model_config$vB$start %||% 0.05)
+              updateNumericInput(session, paste0("vB.lower", suffix), value = model_config$vB$lower %||% 0.01)
+              updateNumericInput(session, paste0("vB.upper", suffix), value = model_config$vB$upper %||% 0.1)
+              
+              # Handle vB parameter restoration based on model number (suffix)
+              if (suffix == "") {
+                # Model 1 uses old checkbox system
+                updateCheckboxInput(session, paste0("vB.fit", suffix), value = model_config$vB$fit %||% TRUE)
+              } else {
+                # Models 2 and 3 use new inheritance system
+                if (!is.null(model_config$vB_source)) {
+                  updateSelectInput(session, paste0("vB_source", suffix), selected = model_config$vB_source %||% "fit")
+                } else if (!is.null(model_config$vB$fit)) {
+                  # Backward compatibility: convert old fit boolean to new vB_source
+                  vB_source_value <- if (model_config$vB$fit) "fit" else "set"
+                  updateSelectInput(session, paste0("vB_source", suffix), selected = vB_source_value)
+                }
+              }
+            }
+          } else if (!is.null(model_type) && (model_type == "Logan" || model_type == "MA1")) {
+            if (!is.null(model_config$tstar)) {
+              updateNumericInput(session, paste0("tstarIncludedFrames", suffix), value = model_config$tstar %||% 10)
+            }
+            if (!is.null(model_config$vB_source)) {
+              updateSelectInput(session, paste0("vB_source", suffix), selected = model_config$vB_source %||% "set")
+            }
+            if (!is.null(model_config$vB_value)) {
+              updateNumericInput(session, paste0("vB_value", suffix), value = model_config$vB_value %||% 0.05)
+            }
+          } else if (!is.null(model_type) && model_type == "refLogan") {
+            if (!is.null(model_config$tstar)) {
+              updateNumericInput(session, paste0("tstarIncludedFrames", suffix), value = model_config$tstar %||% 10)
+            }
+            if (!is.null(model_config$k2prime_source)) {
+              updateSelectInput(session, paste0("k2prime_source", suffix), selected = model_config$k2prime_source %||% "set")
+            }
+            if (!is.null(model_config$k2prime_value)) {
+              updateNumericInput(session, paste0("k2prime_value", suffix), value = model_config$k2prime_value %||% 0.1)
+            }
+          } else if (!is.null(model_type) && (model_type == "SRTM" || model_type == "MRTM1")) {
+            if (!is.null(model_config$R1)) {
+              updateNumericInput(session, paste0("R1.start", suffix), value = model_config$R1$start %||% 1)
+              updateNumericInput(session, paste0("R1.lower", suffix), value = model_config$R1$lower %||% 0.0001)
+              updateNumericInput(session, paste0("R1.upper", suffix), value = model_config$R1$upper %||% 5)
+            }
+            if (!is.null(model_config$k2)) {
+              updateNumericInput(session, paste0("k2.start", suffix), value = model_config$k2$start %||% 0.1)
+              updateNumericInput(session, paste0("k2.lower", suffix), value = model_config$k2$lower %||% 0.0001)
+              updateNumericInput(session, paste0("k2.upper", suffix), value = model_config$k2$upper %||% 0.5)
+            }
+            if (!is.null(model_config$k2a)) {
+              updateNumericInput(session, paste0("k2a.start", suffix), value = model_config$k2a$start %||% 0.1)
+              updateNumericInput(session, paste0("k2a.lower", suffix), value = model_config$k2a$lower %||% 0.0001)
+              updateNumericInput(session, paste0("k2a.upper", suffix), value = model_config$k2a$upper %||% 0.5)
+            }
+          } else if (!is.null(model_type) && model_type == "MRTM2") {
+            if (!is.null(model_config$R1)) {
+              updateNumericInput(session, paste0("R1.start", suffix), value = model_config$R1$start %||% 1)
+              updateNumericInput(session, paste0("R1.lower", suffix), value = model_config$R1$lower %||% 0.0001)
+              updateNumericInput(session, paste0("R1.upper", suffix), value = model_config$R1$upper %||% 5)
+            }
+            if (!is.null(model_config$k2prime_source)) {
+              updateSelectInput(session, paste0("k2prime_source", suffix), selected = model_config$k2prime_source %||% "set")
+            }
+            if (!is.null(model_config$k2prime_value)) {
+              updateNumericInput(session, paste0("k2prime_value", suffix), value = model_config$k2prime_value %||% 0.1)
+            }
+          }
+          
+          # Restore common parameters for all model types
+          if (!is.null(model_config$subset)) {
+            updateRadioButtons(session, paste0("subset_type", suffix), selected = model_config$subset$type %||% "time")
+            updateNumericInput(session, paste0("start_point", suffix), value = model_config$subset$start)
+            updateNumericInput(session, paste0("end_point", suffix), value = model_config$subset$end)
+          }
+          
+          if (!is.null(model_config$multstart_iter)) {
+            updateNumericInput(session, paste0("multstart_iter", suffix), value = model_config$multstart_iter %||% 1)
+          }
+        }
+        
         # Restore Model 1 settings
         if (!is.null(existing_config$Models$Model1)) {
-          updateSelectInput(session, "button", selected = existing_config$Models$Model1$type %||% "1TCM")
+          updateSelectInput(session, "button", selected = existing_config$Models$Model1$type %||% "none")
+          restore_model_params(existing_config$Models$Model1, "")
         }
         
         # Restore Model 2 settings
         if (!is.null(existing_config$Models$Model2)) {
-          updateSelectInput(session, "button2", selected = existing_config$Models$Model2$type %||% "1TCM")
+          updateSelectInput(session, "button2", selected = existing_config$Models$Model2$type %||% "none")
+          restore_model_params(existing_config$Models$Model2, "2")
         }
         
         # Restore Model 3 settings
         if (!is.null(existing_config$Models$Model3)) {
-          updateSelectInput(session, "button3", selected = existing_config$Models$Model3$type %||% "1TCM")
+          updateSelectInput(session, "button3", selected = existing_config$Models$Model3$type %||% "none")
+          restore_model_params(existing_config$Models$Model3, "3")
         }
         
         # Restore Weights settings
@@ -974,17 +1634,154 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
         inpshift_upper = input$delay_inpshift_upper %||% 0.5
       )
       
-      # Models (capture actual model inputs)
+      # Models (capture actual model inputs and parameters)
+      
+      # Helper function to capture model parameters
+      capture_model_params <- function(model_type, suffix = "") {
+        model_params <- list(type = model_type)
+        
+        if (model_type == "none" || is.null(model_type)) {
+          return(model_params)
+        }
+        
+        # Capture parameters based on model type
+        if (model_type == "1TCM") {
+          model_params$K1 = list(
+            start = input[[paste0("K1.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("K1.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("K1.upper", suffix)]] %||% 0.5
+          )
+          model_params$k2 = list(
+            start = input[[paste0("k2.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("k2.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("k2.upper", suffix)]] %||% 0.5
+          )
+          
+          # Handle vB parameter based on model number (suffix)
+          if (suffix == "") {
+            # Model 1 uses old checkbox system
+            model_params$vB = list(
+              start = input[[paste0("vB.start", suffix)]] %||% 0.05,
+              lower = input[[paste0("vB.lower", suffix)]] %||% 0.01,
+              upper = input[[paste0("vB.upper", suffix)]] %||% 0.1,
+              fit = input[[paste0("vB.fit", suffix)]] %||% TRUE
+            )
+          } else {
+            # Models 2 and 3 use new inheritance system
+            model_params$vB = list(
+              start = input[[paste0("vB.start", suffix)]] %||% 0.05,
+              lower = input[[paste0("vB.lower", suffix)]] %||% 0.01,
+              upper = input[[paste0("vB.upper", suffix)]] %||% 0.1
+            )
+            model_params$vB_source = input[[paste0("vB_source", suffix)]] %||% "fit"
+          }
+          
+        } else if (model_type == "2TCM") {
+          model_params$K1 = list(
+            start = input[[paste0("K1.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("K1.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("K1.upper", suffix)]] %||% 0.5
+          )
+          model_params$k2 = list(
+            start = input[[paste0("k2.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("k2.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("k2.upper", suffix)]] %||% 0.5
+          )
+          model_params$k3 = list(
+            start = input[[paste0("k3.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("k3.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("k3.upper", suffix)]] %||% 0.5
+          )
+          model_params$k4 = list(
+            start = input[[paste0("k4.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("k4.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("k4.upper", suffix)]] %||% 0.5
+          )
+          
+          # Handle vB parameter based on model number (suffix)
+          if (suffix == "") {
+            # Model 1 uses old checkbox system
+            model_params$vB = list(
+              start = input[[paste0("vB.start", suffix)]] %||% 0.05,
+              lower = input[[paste0("vB.lower", suffix)]] %||% 0.01,
+              upper = input[[paste0("vB.upper", suffix)]] %||% 0.1,
+              fit = input[[paste0("vB.fit", suffix)]] %||% TRUE
+            )
+          } else {
+            # Models 2 and 3 use new inheritance system
+            model_params$vB = list(
+              start = input[[paste0("vB.start", suffix)]] %||% 0.05,
+              lower = input[[paste0("vB.lower", suffix)]] %||% 0.01,
+              upper = input[[paste0("vB.upper", suffix)]] %||% 0.1
+            )
+            model_params$vB_source = input[[paste0("vB_source", suffix)]] %||% "fit"
+          }
+        } else if (model_type == "Logan" || model_type == "MA1") {
+          model_params$tstar = input[[paste0("tstarIncludedFrames", suffix)]] %||% 10
+          model_params$vB_source = input[[paste0("vB_source", suffix)]] %||% "set"
+          if (input[[paste0("vB_source", suffix)]] == "set" || is.null(input[[paste0("vB_source", suffix)]])) {
+            model_params$vB_value = input[[paste0("vB_value", suffix)]] %||% 0.05
+          }
+        } else if (model_type == "refLogan") {
+          model_params$tstar = input[[paste0("tstarIncludedFrames", suffix)]] %||% 10
+          model_params$k2prime_source = input[[paste0("k2prime_source", suffix)]] %||% "set"
+          if (input[[paste0("k2prime_source", suffix)]] == "set" || is.null(input[[paste0("k2prime_source", suffix)]])) {
+            model_params$k2prime_value = input[[paste0("k2prime_value", suffix)]] %||% 0.1
+          }
+        } else if (model_type == "SRTM" || model_type == "MRTM1") {
+          model_params$R1 = list(
+            start = input[[paste0("R1.start", suffix)]] %||% 1,
+            lower = input[[paste0("R1.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("R1.upper", suffix)]] %||% 5
+          )
+          model_params$k2 = list(
+            start = input[[paste0("k2.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("k2.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("k2.upper", suffix)]] %||% 0.5
+          )
+          model_params$k2a = list(
+            start = input[[paste0("k2a.start", suffix)]] %||% 0.1,
+            lower = input[[paste0("k2a.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("k2a.upper", suffix)]] %||% 0.5
+          )
+        } else if (model_type == "MRTM2") {
+          model_params$R1 = list(
+            start = input[[paste0("R1.start", suffix)]] %||% 1,
+            lower = input[[paste0("R1.lower", suffix)]] %||% 0.0001,
+            upper = input[[paste0("R1.upper", suffix)]] %||% 5
+          )
+          model_params$k2prime_source = input[[paste0("k2prime_source", suffix)]] %||% "set"
+          if (input[[paste0("k2prime_source", suffix)]] == "set" || is.null(input[[paste0("k2prime_source", suffix)]])) {
+            model_params$k2prime_value = input[[paste0("k2prime_value", suffix)]] %||% 0.1
+          }
+        }
+        
+        # Add common parameters for all models
+        if (model_type != "none" && !is.null(model_type)) {
+          # TAC subset selection
+          subset_type <- input[[paste0("subset_type", suffix)]] %||% "time"
+          start_point <- input[[paste0("start_point", suffix)]]
+          end_point <- input[[paste0("end_point", suffix)]]
+          
+          if (!is.null(start_point) || !is.null(end_point)) {
+            model_params$subset = list(
+              type = subset_type,
+              start = start_point,
+              end = end_point
+            )
+          }
+          
+          # Multstart iterations
+          model_params$multstart_iter = input[[paste0("multstart_iter", suffix)]] %||% 1
+        }
+        
+        return(model_params)
+      }
+      
       Models <- list(
-        Model1 = list(
-          type = if(!is.null(input$button)) input$button else "Not selected"
-        ),
-        Model2 = list(
-          type = if(!is.null(input$button2)) input$button2 else "Not selected"
-        ),
-        Model3 = list(
-          type = if(!is.null(input$button3)) input$button3 else "Not selected"
-        )
+        Model1 = capture_model_params(input$button %||% "none", ""),
+        Model2 = capture_model_params(input$button2 %||% "none", "2"),
+        Model3 = capture_model_params(input$button3 %||% "none", "3")
       )
       
       config_list <- list(
@@ -1191,6 +1988,13 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
         has_blood_data <- check_blood_files(output_dir) || check_blood_files(bids_dir)
       }
       
+      # Check if delay method is "none" - no report needed
+      if (input$delay_model == "none") {
+        save_config()
+        showNotification("No delay report necessary when delay fitting is disabled", type = "message", duration = 4)
+        return()
+      }
+      
       if (!has_blood_data) {
         # Don't show notification - the status display already indicates no blood data
         return()
@@ -1230,14 +2034,15 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
     })
     
     observeEvent(input$run_model1, {
+      # Save configuration
       save_config()
-      showNotification("Model 1 fitting completed", type = "message", duration = 3)
-      # TODO: Add actual model 1 fitting logic
+      
+      # Show fitting notification
+      model_type <- input$button %||% "1TCM"
+      showNotification(paste("Fitting Model 1 (", model_type, ")..."), type = "message", duration = NULL, id = "fitting_model1")
       
       # Generate model 1 report
       tryCatch({
-        model_type <- input$button %||% "1TCM"
-        
         report_file <- generate_model_report(
           model_type = model_type,
           model_number = "Model 1",
@@ -1246,24 +2051,28 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
           blood_dir = blood_dir
         )
         
-        if (!is.null(report_file)) {
-          showNotification(paste("Model 1 report generated (", model_type, ")"), type = "message", duration = 3)
-        }
+        # Remove fitting notification and show completion
+        removeNotification(id = "fitting_model1")
+        showNotification("Model 1 fitting report generated successfully", type = "message", duration = 5)
         
       }, error = function(e) {
+        # Remove fitting notification and show error
+        removeNotification(id = "fitting_model1")
+        showNotification("Error fitting Model 1", type = "error", duration = 5)
         cat("Warning: Could not generate Model 1 report:", e$message, "\n")
       })
     })
     
     observeEvent(input$run_model2, {
+      # Save configuration
       save_config()
-      showNotification("Model 2 fitting completed", type = "message", duration = 3)
-      # TODO: Add actual model 2 fitting logic
+      
+      # Show fitting notification
+      model_type <- input$button2 %||% "1TCM"
+      showNotification(paste("Fitting Model 2 (", model_type, ")..."), type = "message", duration = NULL, id = "fitting_model2")
       
       # Generate model 2 report
       tryCatch({
-        model_type <- input$button2 %||% "1TCM"
-        
         report_file <- generate_model_report(
           model_type = model_type,
           model_number = "Model 2",
@@ -1272,24 +2081,28 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
           blood_dir = blood_dir
         )
         
-        if (!is.null(report_file)) {
-          showNotification(paste("Model 2 report generated (", model_type, ")"), type = "message", duration = 3)
-        }
+        # Remove fitting notification and show completion
+        removeNotification(id = "fitting_model2")
+        showNotification("Model 2 fitting report generated successfully", type = "message", duration = 5)
         
       }, error = function(e) {
+        # Remove fitting notification and show error
+        removeNotification(id = "fitting_model2")
+        showNotification("Error fitting Model 2", type = "error", duration = 5)
         cat("Warning: Could not generate Model 2 report:", e$message, "\n")
       })
     })
     
     observeEvent(input$run_model3, {
+      # Save configuration
       save_config()
-      showNotification("Model 3 fitting completed", type = "message", duration = 3)
-      # TODO: Add actual model 3 fitting logic
+      
+      # Show fitting notification
+      model_type <- input$button3 %||% "1TCM"
+      showNotification(paste("Fitting Model 3 (", model_type, ")..."), type = "message", duration = NULL, id = "fitting_model3")
       
       # Generate model 3 report
       tryCatch({
-        model_type <- input$button3 %||% "1TCM"
-        
         report_file <- generate_model_report(
           model_type = model_type,
           model_number = "Model 3",
@@ -1298,11 +2111,14 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
           blood_dir = blood_dir
         )
         
-        if (!is.null(report_file)) {
-          showNotification(paste("Model 3 report generated (", model_type, ")"), type = "message", duration = 3)
-        }
+        # Remove fitting notification and show completion
+        removeNotification(id = "fitting_model3")
+        showNotification("Model 3 fitting report generated successfully", type = "message", duration = 5)
         
       }, error = function(e) {
+        # Remove fitting notification and show error
+        removeNotification(id = "fitting_model3")
+        showNotification("Error fitting Model 3", type = "error", duration = 5)
         cat("Warning: Could not generate Model 3 report:", e$message, "\n")
       })
     })
@@ -1317,31 +2133,50 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
     observeEvent(input$run_all, {
       save_config()
       
-      # Execute all steps in sequence with progress notifications
-      showNotification("Running all steps...", type = "message", duration = 2)
+      # Show initial notification
+      showNotification("Starting automatic pipeline execution...", type = "message", duration = 3, id = "run_all_start")
       
-      Sys.sleep(0.5)
-      showNotification("Step 1/6: Data subsetting completed", type = "message", duration = 2)
-      
-      Sys.sleep(0.5)
-      showNotification("Step 2/6: Weights calculation completed", type = "message", duration = 2)
-      
-      Sys.sleep(0.5)
-      showNotification("Step 3/6: Delay estimation completed", type = "message", duration = 2)
-      
-      Sys.sleep(0.5)
-      showNotification("Step 4/6: Model 1 fitting completed", type = "message", duration = 2)
-      
-      Sys.sleep(0.5)
-      showNotification("Step 5/6: Model 2 fitting completed", type = "message", duration = 2)
-      
-      Sys.sleep(0.5)
-      showNotification("Step 6/6: Model 3 fitting completed", type = "message", duration = 2)
-      
-      Sys.sleep(0.5)
-      showNotification("All steps completed successfully!", type = "message", duration = 5)
-      
-      # TODO: Add actual sequential execution logic for all steps
+      # Run the automatic pipeline
+      tryCatch({
+        result <- run_automatic_pipeline(
+          analysis_folder = output_dir,
+          bids_dir = bids_dir,
+          derivatives_dir = derivatives_dir,
+          blood_dir = blood_dir,
+          step = NULL  # NULL means full pipeline
+        )
+        
+        if (result$success) {
+          # Show success message with reports generated
+          success_msg <- "All pipeline steps completed successfully!"
+          if (length(result$reports_generated) > 0) {
+            success_msg <- paste0(success_msg, " Reports generated: ", 
+                                 paste(result$reports_generated, collapse = ", "))
+          }
+          showNotification(success_msg, type = "message", duration = 10)
+          
+          # Log all messages to console
+          for (msg in result$messages) {
+            cat("[Run All]", msg, "\n")
+          }
+        } else {
+          # Show error message
+          error_msg <- paste("Pipeline execution failed:", 
+                           paste(result$messages, collapse = "; "))
+          showNotification(error_msg, type = "error", duration = 10)
+          
+          # Log error messages to console
+          cat("[Run All] Error:\n")
+          for (msg in result$messages) {
+            cat("  ", msg, "\n")
+          }
+        }
+        
+      }, error = function(e) {
+        error_msg <- paste("Error executing pipeline:", e$message)
+        showNotification(error_msg, type = "error", duration = 10)
+        cat("[Run All] Exception:", e$message, "\n")
+      })
     })
     
     # Output for analysis folder display
@@ -1354,8 +2189,210 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
       config_json()
     })
     
+    # Interactive tab server logic ----
+    
+    # Create reactive tibble to store PET files and their info
+    pet_files_data <- reactive({
+      tryCatch({
+        # Look for TACs files in output directory
+        tacs_pattern <- "*_desc-combinedregions_tacs.tsv"
+        tacs_files <- list.files(output_dir, pattern = gsub("\\*", ".*", tacs_pattern), 
+                                recursive = TRUE, full.names = TRUE)
+        
+        if (length(tacs_files) > 0) {
+          # Use unified BIDS parsing to extract PET identifiers
+          pet_names <- get_pet_identifiers(tacs_files, output_dir)
+          
+          # Create tibble with pet names and file paths
+          tibble::tibble(
+            pet = pet_names,
+            filename = tacs_files
+          )
+        } else {
+          # Return empty tibble if no files found
+          tibble::tibble(pet = character(0), filename = character(0))
+        }
+      }, error = function(e) {
+        cat("Error loading TACs files for interactive mode:", e$message, "\n")
+        tibble::tibble(pet = character(0), filename = character(0))
+      })
+    })
+    
+    # Handle Scan Analysis Folder button
+    observeEvent(input$scan_folder, {
+      showNotification("Scanning analysis folder...", type = "message", duration = 2)
+      
+      tryCatch({
+        pet_data <- pet_files_data()
+        
+        if (nrow(pet_data) > 0) {
+          # Update PET measurement dropdown
+          pet_choices <- c("None" = "none", setNames(pet_data$pet, pet_data$pet))
+          updateSelectInput(session, "interactive_pet",
+                           choices = pet_choices,
+                           selected = "none")
+          
+          # Update region dropdown using first TACs file
+          first_tacs_file <- pet_data$filename[1]
+          tacs_data <- readr::read_tsv(first_tacs_file, show_col_types = FALSE)
+          
+          if ("region" %in% colnames(tacs_data)) {
+            unique_regions <- sort(unique(tacs_data$region))
+            unique_regions <- unique_regions[!is.na(unique_regions)]
+            
+            if (length(unique_regions) > 0) {
+              region_choices <- c("None" = "none", setNames(unique_regions, unique_regions))
+              updateSelectInput(session, "interactive_region",
+                               choices = region_choices,
+                               selected = "none")
+              
+              showNotification(paste("Found", nrow(pet_data), "PET measurements and", length(unique_regions), "regions"), 
+                              type = "message", duration = 4)
+              cat("Scanned:", nrow(pet_data), "TACs files,", length(unique_regions), "regions\n")
+            } else {
+              updateSelectInput(session, "interactive_region",
+                               choices = c("No regions found" = "none"),
+                               selected = "none")
+              showNotification("Found files but no regions detected", type = "warning", duration = 4)
+            }
+          } else {
+            updateSelectInput(session, "interactive_region",
+                             choices = c("No region column found" = "none"),
+                             selected = "none")
+            showNotification("Found files but no region column detected", type = "warning", duration = 4)
+          }
+        } else {
+          # No TACs files found
+          updateSelectInput(session, "interactive_pet",
+                           choices = c("No TACs files found" = "none"),
+                           selected = "none")
+          updateSelectInput(session, "interactive_region",
+                           choices = c("No TACs files found" = "none"),
+                           selected = "none")
+          showNotification("No TACs files found. Run 'Data Definition' first to create analysis data.", 
+                          type = "warning", duration = 6)
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error scanning folder:", e$message), type = "error", duration = 5)
+        cat("Error in scan_folder:", e$message, "\n")
+      })
+    })
+    
+    # Create reactive value to store plot data (only updates on button press)
+    plot_data <- reactiveVal(NULL)
+    
+    # Handle Load Data button
+    observeEvent(input$load_data, {
+      # Check if PET and Region are selected
+      if (input$interactive_pet == "none" || input$interactive_region == "none") {
+        showNotification("PET and Region must be specified before loading data", 
+                        type = "error", duration = 5)
+        return()
+      }
+      
+      tryCatch({
+        # Get the correct filename from our tibble
+        pet_data <- pet_files_data()
+        pet_file_info <- pet_data[pet_data$pet == input$interactive_pet, ]
+        
+        if (nrow(pet_file_info) == 0) {
+          showNotification("Selected PET measurement not found", type = "error", duration = 5)
+          return()
+        }
+        
+        # Load and check data
+        tacs_data <- readr::read_tsv(pet_file_info$filename[1], show_col_types = FALSE)
+        region_data <- tacs_data[tacs_data$region == input$interactive_region, ]
+        
+        # Get model information
+        model_display <- switch(input$interactive_model,
+                               "none" = "TAC Data Only",
+                               "model1" = "Model 1",
+                               "model2" = "Model 2", 
+                               "model3" = "Model 3")
+        
+        if (nrow(region_data) > 0) {
+          # Store the plot data with metadata
+          plot_data(list(
+            data = region_data,
+            pet = input$interactive_pet,
+            region = input$interactive_region,
+            model = input$interactive_model,
+            model_display = model_display
+          ))
+          
+          showNotification(paste("Loaded TAC data for", input$interactive_region, "in", input$interactive_pet, "| View:", model_display), 
+                          type = "message", duration = 3)
+        } else {
+          showNotification("No data found for selected region", type = "warning", duration = 3)
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error loading data:", e$message), type = "error", duration = 5)
+        cat("Error in load_data:", e$message, "\n")
+      })
+    })
+    
+    # Handle Fit Model button (placeholder for now)
+    observeEvent(input$fit_model, {
+      req(input$load_data > 0)
+      
+      showNotification("Model fitting functionality coming soon", 
+                      type = "message", duration = 3)
+    })
+    
+    # Generate TAC plot (only uses data stored by Load Data button)
+    output$tac_plot <- renderPlot({
+      # Only react to the stored plot data, not the input values
+      plot_info <- plot_data()
+      req(plot_info)
+      
+      tryCatch({
+        region_data <- plot_info$data
+        
+        if (nrow(region_data) == 0) {
+          # Create empty plot with message
+          plot.new()
+          text(0.5, 0.5, "No data available for selected region", 
+               cex = 1.2, col = "red")
+          return()
+        }
+        
+        # Create the plot using stored data and metadata
+        # library(ggplot2)
+        
+        p <- ggplot(region_data, aes(x = frame_mid/60, y = TAC)) +
+          geom_line(color = "#4DAF4A", linewidth = 0.25) +
+          geom_point(color = "#377EB8") +
+          labs(
+            title = paste0(plot_info$pet, " : ", plot_info$region ),
+            x = "Time (min)",
+            y = "Radioactivity"
+          ) +
+          theme_light()
+        
+        # Future: Add model fitting and overlay when model1/model2/model3 selected
+        # For now, all options show the same TAC plot
+        
+        print(p)
+        
+      }, error = function(e) {
+        # Create error plot
+        plot.new()
+        text(0.5, 0.5, paste("Error generating plot:", e$message), 
+             cex = 1, col = "red", adj = 0.5)
+        cat("Error in tac_plot:", e$message, "\n")
+      })
+    }, width = 800, height = 500, res = 96)
+    
   }
   
-  # Run the application
-  shiny::shinyApp(ui = ui, server = server)
+  # Create the application
+  app <- shiny::shinyApp(ui = ui, server = server)
+  
+  # Run with Docker-compatible settings
+  cat("If running from within a docker container, open one of the following addresses in your web browser.\n")
+  cat("http://localhost:3838\n")
+  shiny::runApp(app, host = "0.0.0.0", port = 3838)
 }

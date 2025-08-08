@@ -487,9 +487,9 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
                 morph_df <- readr::read_tsv(morph_file, show_col_types = FALSE)
                 
                 # Filter for non-zero volume-mm3 values
-                if ("volume.mm3" %in% colnames(morph_df) && "name" %in% colnames(morph_df)) {
+                if ("volume-mm3" %in% colnames(morph_df) && "name" %in% colnames(morph_df)) {
                   filtered_morph <- morph_df %>%
-                    dplyr::filter(volume.mm3 != 0) %>%
+                    dplyr::filter(`volume-mm3` != 0) %>%
                     dplyr::select(name) %>%
                     dplyr::arrange(name)
                   
@@ -497,7 +497,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
                   filtered_morph_data(filtered_morph)  # Initialize filtered data with all data
                   cat("Loaded", nrow(filtered_morph), "regions with non-zero volume from:", morph_file, "\n")
                 } else {
-                  cat("Warning: Expected columns 'name' and 'volume.mm3' not found in morph file\n")
+                  cat("Warning: Expected columns 'name' and 'volume-mm3' not found in morph file\n")
                   morph_data(NULL)
                   filtered_morph_data(NULL)
                 }
@@ -952,6 +952,12 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     })
   }
   
-  # Run the app
-  shiny::shinyApp(ui = ui, server = server)
+  # Create the application
+  app <- shiny::shinyApp(ui = ui, server = server)
+  
+  # Run with Docker-compatible settings
+  cat("Please open the address on the following line in your web browser.\n")
+  cat("If that doesn't work, use the address from the next line:\n")
+  cat("http://localhost:3838\n")
+  shiny::runApp(app, host = "0.0.0.0", port = 3838)
 }

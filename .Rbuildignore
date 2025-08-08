@@ -1,2 +1,10 @@
+^codecov\.yml$
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.httr-oauth$
+^\.github$
+^README.Rmd
+^data-raw
+^CLAUDE\.md$
+^LICENSE\.md$
+^docker*
