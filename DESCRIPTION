@@ -2,7 +2,10 @@ Package: kinfitrapp
 Title: Kinfitr BIDS App Configuration Interface
 Version: 0.0.0.9000
 Authors@R: 
-    person("Granville", "Matheson", , "mathesong@gmail.com", role = c("aut", "cre"))
+    c(person("Granville", "Matheson", , "granville.matheson@ki.se", role = c("aut", "cre")),
+    c(person("Alessio", "Giacomel", , "alessio.giacomel@kcl.ac.uk", role = c("ctb")),
+    c(person("Martin", "Noergaard", , "martin.noergaard@di.ku.dk", role = c("ctb")),
+    c(person("Anthony", "Galassi"), , "anthony.galassi@nih.gov", role = c("ctb")))
 Description: A BIDS app implementation and shiny UI for performing PET kinetic
      modelling using kinfitr. Provides user interface forconfiguring kinetic 
      modeling parameters for Time Activity Curves (TACs).
