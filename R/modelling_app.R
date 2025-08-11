@@ -93,21 +93,32 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
   } else {
     cat("No combined TACs file found. Checking for kinfitr_regions.tsv...\n")
     
-    # Look for kinfitr_regions.tsv file
+    # Look for kinfitr_regions.tsv file using read/write logic
+    # Always write to kinfitr_dir (derivatives/kinfitr)
+    write_config_dir <- kinfitr_dir
+    
+    # For reading: check derivatives/kinfitr first, then BIDS code directory
+    read_config_dirs <- c(kinfitr_dir)
     if (!is.null(bids_dir)) {
-      config_dir <- file.path(bids_dir, "code", "kinfitr")
-    } else {
-      config_dir <- kinfitr_dir
+      read_config_dirs <- c(read_config_dirs, file.path(bids_dir, "code", "kinfitr"))
     }
     
-    regions_file <- file.path(config_dir, "kinfitr_regions.tsv")
+    # Find existing regions file by checking read directories in order
+    existing_regions_file <- NULL
+    for (dir in read_config_dirs) {
+      potential_file <- file.path(dir, "kinfitr_regions.tsv")
+      if (file.exists(potential_file)) {
+        existing_regions_file <- potential_file
+        break
+      }
+    }
     
-    if (file.exists(regions_file)) {
+    if (!is.null(existing_regions_file)) {
       cat("Found kinfitr_regions.tsv. Generating combined TACs file...\n")
       
       tryCatch({
         # Generate combined TACs using existing functionality
-        kinfitr_regions_files_path <- file.path(config_dir, "kinfitr_regions_files.tsv")
+        kinfitr_regions_files_path <- file.path(write_config_dir, "kinfitr_regions_files.tsv")
         
         # Load participant data if BIDS directory is provided
         participant_data <- NULL
@@ -119,7 +130,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
         }
         
         # Create file mapping
-        regions_files_data <- create_kinfitr_regions_files(regions_file, derivatives_dir)
+        regions_files_data <- create_kinfitr_regions_files(existing_regions_file, derivatives_dir)
         
         # Generate combined TACs with participant data and BIDS directory
         combined_data <- create_kinfitr_combined_tacs(kinfitr_regions_files_path, derivatives_dir, kinfitr_dir, bids_dir, participant_data)

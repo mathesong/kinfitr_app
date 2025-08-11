@@ -4,12 +4,12 @@
 \name{kinfitrapp-package}
 \alias{kinfitrapp}
 \alias{kinfitrapp-package}
-\title{kinfitrapp: kinfitr BIDS App Configuration Interface}
+\title{kinfitrapp: Kinfitr BIDS App Configuration Interface}
 \description{
-A Shiny web application for creating customized kinfitr BIDS App configuration files for PET imaging analysis. Provides user interface for configuring kinetic modeling parameters for Time Activity Curves (TACs).
+A BIDS app implementation and shiny UI for performing PET kinetic modelling using kinfitr. Provides user interface forconfiguring kinetic modeling parameters for Time Activity Curves (TACs).
 }
 \author{
-\strong{Maintainer}: First Last \email{first.last@example.com}
+\strong{Maintainer}: Granville Matheson \email{mathesong@gmail.com}
 
 }
 \keyword{internal}

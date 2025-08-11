@@ -1,11 +1,11 @@
 Package: kinfitrapp
-Title: kinfitr BIDS App Configuration Interface
-Version: 0.1.0
+Title: Kinfitr BIDS App Configuration Interface
+Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: A Shiny web application for creating customized kinfitr BIDS App 
-    configuration files for PET imaging analysis. Provides user interface for 
-    configuring kinetic modeling parameters for Time Activity Curves (TACs).
+    person("Granville", "Matheson", , "mathesong@gmail.com", role = c("aut", "cre"))
+Description: A BIDS app implementation and shiny UI for performing PET kinetic
+     modelling using kinfitr. Provides user interface forconfiguring kinetic 
+     modeling parameters for Time Activity Curves (TACs).
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -20,19 +20,19 @@ Imports:
     dplyr,
     purrr,
     jsonlite,
-    kinfitr,
     tidyr,
     utils,
     magrittr,
     later,
-    readr,
-    rmarkdown,
-    knitr,
-    ggplot2,
-    plotly,
     crosstalk,
+    DT,
+    ggplot2,
+    htmltools,
+    knitr,
+    rmarkdown,
     optparse,
-    DT
+    plotly,
+    kinfitr
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

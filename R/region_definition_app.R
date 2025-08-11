@@ -25,19 +25,20 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     stop(paste("BIDS directory does not exist:", bids_dir), call. = FALSE)
   }
   
-  # Set config directory (for kinfitr_regions.tsv)
+  # Set directories for reading and writing config files
+  # Always write to derivatives/kinfitr (base kinfitr folder, same as combined_regions)
+  write_config_dir <- file.path(derivatives_dir, "kinfitr")
+  
+  # For reading: check derivatives/kinfitr first, then BIDS code directory
+  read_config_dirs <- c(write_config_dir)
   if (!is.null(bids_dir)) {
-    # Standard BIDS structure: bids_dir/code/kinfitr
-    config_dir <- file.path(bids_dir, "code", "kinfitr")
-  } else {
-    # No BIDS dir: use derivatives/kinfitr_output_foldername
-    config_dir <- file.path(derivatives_dir, kinfitr_output_foldername)
+    read_config_dirs <- c(read_config_dirs, file.path(bids_dir, "code", "kinfitr"))
   }
   
-  # Create config directory if it doesn't exist
-  if (!dir.exists(config_dir)) {
-    dir.create(config_dir, recursive = TRUE)
-    cat("Created config directory:", config_dir, "\n")
+  # Create write config directory if it doesn't exist
+  if (!dir.exists(write_config_dir)) {
+    dir.create(write_config_dir, recursive = TRUE)
+    cat("Created config directory:", write_config_dir, "\n")
   }
   
   # Normalize paths
@@ -45,7 +46,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     bids_dir <- normalizePath(bids_dir, mustWork = FALSE)
   }
   derivatives_dir <- normalizePath(derivatives_dir, mustWork = FALSE)
-  config_dir <- normalizePath(config_dir, mustWork = FALSE)
+  write_config_dir <- normalizePath(write_config_dir, mustWork = FALSE)
   
   # Create derivatives directory if it doesn't exist
   if (!dir.exists(derivatives_dir)) {
@@ -71,13 +72,25 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     cat("  BIDS directory:", bids_dir, "\n")
   }
   cat("  Derivatives directory:", derivatives_dir, "\n")
-  cat("  Config directory:", config_dir, "\n")
+  cat("  Config write directory:", write_config_dir, "\n")
+  cat("  Config read directories:", paste(read_config_dirs, collapse=", "), "\n")
   
-  # Initialize kinfitr_regions.tsv file
-  regions_file <- file.path(config_dir, "kinfitr_regions.tsv")
+  # Initialize kinfitr_regions.tsv file with read/write logic
+  # Always write to write_config_dir
+  write_regions_file <- file.path(write_config_dir, "kinfitr_regions.tsv")
+  
+  # Find existing regions file by checking read directories in order
+  existing_write_regions_file <- NULL
+  for (dir in read_config_dirs) {
+    potential_file <- file.path(dir, "kinfitr_regions.tsv")
+    if (file.exists(potential_file)) {
+      existing_write_regions_file <- potential_file
+      break
+    }
+  }
+  
   file_was_empty <- FALSE
-  
-  if (!file.exists(regions_file)) {
+  if (is.null(existing_write_regions_file)) {
     # Create empty regions file with proper columns
     empty_regions <- tibble::tibble(
       RegionName = character(0),
@@ -85,14 +98,20 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       description = character(0),
       ConstituentRegion = character(0)
     )
-    readr::write_tsv(empty_regions, regions_file)
+    readr::write_tsv(empty_regions, write_regions_file)
     file_was_empty <- TRUE
-    cat("Created empty kinfitr_regions.tsv file:", regions_file, "\n")
+    cat("Created empty kinfitr_regions.tsv file:", write_regions_file, "\n")
   } else {
     # Check if existing file is empty
-    existing_data <- readr::read_tsv(regions_file, show_col_types = FALSE)
+    existing_data <- readr::read_tsv(existing_write_regions_file, show_col_types = FALSE)
     file_was_empty <- nrow(existing_data) == 0
-    cat("Found existing kinfitr_regions.tsv file:", regions_file, "\n")
+    cat("Found existing kinfitr_regions.tsv file:", existing_write_regions_file, "\n")
+    
+    # If reading from a different location than write location, copy it over
+    if (existing_write_regions_file != write_regions_file) {
+      file.copy(existing_write_regions_file, write_regions_file, overwrite = TRUE)
+      cat("Copied regions file to write location:", write_regions_file, "\n")
+    }
   }
   
   # Try to create TACs list, with error handling
@@ -227,7 +246,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     # Load defined regions on startup
     observe({
       regions_data <- tryCatch({
-        readr::read_tsv(regions_file, show_col_types = FALSE)
+        readr::read_tsv(write_regions_file, show_col_types = FALSE)
       }, error = function(e) {
         tibble::tibble(
           RegionName = character(0),
@@ -243,14 +262,14 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     session$onSessionEnded(function() {
       # Read file directly instead of using reactive
       current_data <- tryCatch({
-        readr::read_tsv(regions_file, show_col_types = FALSE)
+        readr::read_tsv(write_regions_file, show_col_types = FALSE)
       }, error = function(e) {
         NULL
       })
       
       if (is.null(current_data) || nrow(current_data) == 0) {
-        if (file.exists(regions_file)) {
-          file.remove(regions_file)
+        if (file.exists(write_regions_file)) {
+          file.remove(write_regions_file)
           cat("Removed empty kinfitr_regions.tsv file on app close\n")
         }
       }
@@ -683,7 +702,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       }
       
       # Save to file
-      readr::write_tsv(updated_data, regions_file)
+      readr::write_tsv(updated_data, write_regions_file)
       
       # Update reactive value - this triggers reactive updates
       defined_regions_data(updated_data)
@@ -740,7 +759,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       }
       
       # Save to file
-      readr::write_tsv(updated_data, regions_file)
+      readr::write_tsv(updated_data, write_regions_file)
       
       # Update reactive value - this triggers reactive updates
       defined_regions_data(updated_data)
@@ -778,7 +797,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       removed_count <- nrow(current_data) - nrow(updated_data)
       
       # Save to file
-      readr::write_tsv(updated_data, regions_file)
+      readr::write_tsv(updated_data, write_regions_file)
       
       # Update reactive value
       defined_regions_data(updated_data)
@@ -809,7 +828,7 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
       )
       
       # Save empty file
-      readr::write_tsv(empty_data, regions_file)
+      readr::write_tsv(empty_data, write_regions_file)
       
       # Update reactive value
       defined_regions_data(empty_data)
@@ -897,14 +916,14 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
                         type = "message", duration = NULL, id = "processing_tacs")
         
         # Step 1: Create file mapping
-        kinfitr_regions_file <- regions_file
+        kinfitr_regions_file <- write_regions_file
         derivatives_folder <- normalizePath(derivatives_dir, mustWork = FALSE)
         
         cat("Creating file mapping...\n")
         regions_files_data <- create_kinfitr_regions_files(kinfitr_regions_file, derivatives_folder)
         
         # Step 2: Process all regions
-        kinfitr_regions_files_path <- file.path(config_dir, "kinfitr_regions_files.tsv")
+        kinfitr_regions_files_path <- file.path(write_config_dir, "kinfitr_regions_files.tsv")
         combined_output_folder <- file.path(derivatives_dir, kinfitr_output_foldername)
         
         cat("Processing all regions...\n")

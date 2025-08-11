@@ -1,6 +1,6 @@
 # kinfitrapp: kinfitr BIDS App Configuration Interface
 
-A comprehensive R Shiny web application suite for creating customized kinfitr BIDS App configuration files for PET imaging analysis. This package provides an intuitive user interface for configuring kinetic modeling parameters for Time Activity Curves (TACs), with support for both interactive GUI-based configuration and automated batch processing.
+An R Shiny web application suite for creating customized kinfitr BIDS App configuration files for PET imaging analysis. This package provides an intuitive user interface for configuring kinetic modeling parameters for Time Activity Curves (TACs), with support for both interactive GUI-based configuration and automated batch processing.
 
 ## Overview
 
@@ -53,7 +53,7 @@ Both applications support multiple usage modes including interactive GUI configu
 ### Install from Source
 ```r
 # Install development version from GitHub
-devtools::install_github("yourusername/kinfitrapp")
+devtools::install_github("mathesong/kinfitrapp")
 
 # Or install from local source
 devtools::install("path/to/kinfitrapp")
@@ -65,7 +65,7 @@ devtools::install("path/to/kinfitrapp")
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/kinfitrapp.git
+git clone https://github.com/mathesong/kinfitrapp.git
 cd kinfitrapp
 
 # Build the Docker image (this may take 10-15 minutes)
@@ -118,10 +118,27 @@ modelling_app(
 ### Docker Usage
 
 #### Interactive Mode (Default)
+
+**Region Definition App (Interactive)**
+```bash
+# Launch region definition app interactively
+docker run -it --rm \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  -p 3838:3838 \
+  kinfitr:local \
+  --func regiondef
+
+# Then open http://localhost:3838 in your browser
+```
+
+**Modelling App (Interactive)**
 ```bash
 # Launch modelling app interactively
 docker run -it --rm \
-  -v /path/to/your/data:/data/bids_dir \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  -v /path/to/your/blood:/data/blood_dir:ro \
   -p 3838:3838 \
   kinfitr:local \
   --func modelling
@@ -129,19 +146,43 @@ docker run -it --rm \
 # Then open http://localhost:3838 in your browser
 ```
 
+**Detached Mode (Background - use docker logs to see startup messages)**
+```bash
+# Launch modelling app in background
+docker run -d --name kinfitr-server \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  -v /path/to/your/blood:/data/blood_dir:ro \
+  -p 3838:3838 \
+  kinfitr:local \
+  --func modelling
+
+# Check startup messages and get browser URL
+docker logs kinfitr-server
+
+# Then open http://localhost:3838 in your browser
+
+# Stop and remove when done
+docker stop kinfitr-server
+docker rm kinfitr-server
+```
+
 #### Automatic Processing
 ```bash
 # Run complete analysis pipeline
 docker run --rm \
-  -v /path/to/derivatives:/data/derivatives_dir \
-  -v /path/to/blood:/data/blood_dir \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  -v /path/to/your/blood:/data/blood_dir:ro \
   kinfitr:local \
   --func modelling \
   --mode automatic
 
 # Run specific analysis step
 docker run --rm \
-  -v /path/to/derivatives:/data/derivatives_dir \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  -v /path/to/your/blood:/data/blood_dir:ro \
   kinfitr:local \
   --func modelling \
   --mode automatic \
@@ -155,23 +196,26 @@ docker run --rm \
 The kinfitrapp system uses a standardized directory structure that follows BIDS conventions:
 
 ```
-your_study/
-├── bids_directory/                    # Raw BIDS data
-│   ├── participants.tsv
-│   ├── participants.json
-│   ├── code/
-│   │   └── kinfitr/
-│   │       └── kinfitr_regions.tsv    # Region definitions
-│   └── sub-*/
-│       └── ses-*/
-│           └── pet/
-└── derivatives/                       # Processed outputs
-    └── kinfitr/                       # kinfitr outputs
-        ├── desc-combinedregions_tacs.tsv  # Combined TACs
-        └── Analysis_Name/             # Analysis-specific folder
-            ├── desc-kinfitroptions_config.json
-            ├── *_desc-combinedregions_tacs.tsv
-            └── reports/               # HTML reports
+
+ bids_directory/                    # Raw BIDS data
+ ├── participants.tsv
+ ├── participants.json
+ ├── code/
+ │   └── kinfitr/
+ │       └── kinfitr_regions.tsv    # Region definitions
+ └── sub-*/
+     └── ses-*/
+         └── pet/
+ derivatives/                       # Processed outputs
+ └── kinfitr/                       # kinfitr outputs
+     ├── desc-combinedregions_tacs.tsv  # Combined TACs
+     └── Analysis_Name/             # Analysis-specific folder
+         ├── desc-kinfitroptions_config.json
+         ├── *_desc-combinedregions_tacs.tsv
+         └── reports/               # HTML reports
+         └── sub-*/
+              └── ses-*/
+                  └── pet/
 ```
 
 ### Region Definition Workflow
@@ -194,26 +238,21 @@ The modelling app provides comprehensive kinetic modeling configuration:
 #### 1. Data Definition
 - **Subset Selection**: Filter by subject, session, tracer, etc.
 - **Region Selection**: Choose brain regions for analysis
-- **BIDS Integration**: Automatic participant and PET metadata integration
 
 #### 2. Weights Calculation
 - **Multiple Methods**: Choose from predefined or custom weighting formulas
-- **External Segmentations**: Use pre-calculated volume-weighted mean TACs
-- **Quality Control**: Automatic validation and report generation
 
 #### 3. Delay Estimation (Optional)
 - **Blood-Tissue Alignment**: Estimate temporal delays between blood and tissue
-- **Multiple Approaches**: From quick single-region to comprehensive multi-region methods
-- **Conditional Execution**: Only required for invasive models with delay fitting
+- **Multiple Approaches**: Quick single-region and multi-region methods
 
 #### 4. Model Configuration
-- **Three Simultaneous Models**: Configure multiple models for comparison
-- **Complete Parameter Control**: Set start values, bounds, and fitting options
+- **Three Sequential Models**: Configure multiple models for comparison and parameter inheritance
+- **Parameter Control**: Set start values, bounds, and fitting options
 - **Model-Specific Settings**: Tailored interfaces for each kinetic model type
 
 #### 5. Interactive Exploration
 - **Manual Data Loading**: Explore specific PET measurements and regions
-- **Model-Aware Visualization**: Professional plotting with ggplot2
 - **Validation Testing**: Test model configurations before full processing
 
 ### Automatic Pipeline Execution
@@ -246,26 +285,18 @@ result <- run_automatic_pipeline(
 
 ### Docker Advanced Usage
 
-#### Flexible Volume Mounting
-The Docker implementation supports flexible directory mounting strategies:
+#### Volume Mount Permissions Strategy
+The Docker implementation follows security best practices for data access:
 
-```bash
-# BIDS directory only (derivatives auto-created)
-docker run --rm \
-  -v /study/bids:/data/bids_dir \
-  kinfitr:local --func modelling
+- **BIDS Directory** (`/data/bids_dir`): Always mounted **read-only (`:ro`)** to protect source data
+- **Derivatives Directory** (`/data/derivatives_dir`): Always mounted **read-write (`:rw`)** for processing outputs
+- **Blood Directory** (`/data/blood_dir`): Mounted **read-only (`:ro`)** as it contains reference data
 
-# Derivatives directory only (no BIDS needed)
-docker run --rm \
-  -v /study/derivatives:/data/derivatives_dir \
-  kinfitr:local --func modelling
+This approach ensures:
+- Source BIDS data remains protected from accidental modification
+- Processing outputs are written to appropriate derivatives location
+- Configuration files are stored in derivatives (not BIDS) for Docker compatibility
 
-# Both directories explicitly
-docker run --rm \
-  -v /study/bids:/data/bids_dir \
-  -v /analysis/derivatives:/data/derivatives_dir \
-  kinfitr:local --func modelling
-```
 
 #### Blood Data Conditional Mounting
 Blood data is only required when:
@@ -275,8 +306,9 @@ Blood data is only required when:
 ```bash
 # Automatic validation - only mount blood when needed
 docker run --rm \
-  -v /study/derivatives:/data/derivatives_dir \
-  -v /study/blood:/data/blood_dir \  # Only needed for invasive + delay
+  -v /study/bids:/data/bids_dir:ro \
+  -v /study/derivatives:/data/derivatives_dir:rw \
+  -v /study/blood:/data/blood_dir:ro \  # Only needed for invasive + delay
   kinfitr:local \
   --func modelling --mode automatic --step delay
 ```
@@ -286,27 +318,13 @@ docker run --rm \
 # Production server deployment
 docker run -d --name kinfitr-server \
   --restart unless-stopped \
-  -v /data/studies:/data/bids_dir \
+  -v /data/studies:/data/bids_dir:ro \
+  -v /data/derivatives:/data/derivatives_dir:rw \
   -p 8080:3838 \
   kinfitr:local \
   --func modelling
 
 # Access at http://your-server:8080
-```
-
-#### Batch Processing Multiple Analyses
-```bash
-# Process multiple analysis configurations
-for analysis in Primary_Analysis Secondary_Analysis Exploratory; do
-  echo "Processing $analysis..."
-  docker run --rm \
-    -v /data/derivatives:/data/derivatives_dir \
-    -v /data/blood:/data/blood_dir \
-    kinfitr:local \
-    --func modelling \
-    --mode automatic \
-    --analysis_foldername "$analysis"
-done
 ```
 
 ### Development and Testing
@@ -428,10 +446,9 @@ your_analysis/
 #### Blood Data Validation Errors
 **Symptoms**: "Blood data required" errors in automatic mode
 **Solutions**:
-1. Check if invasive models are configured (1TCM, 2TCM, Logan, MA1)
-2. Verify delay fitting is not set to "none" or "zero"
-3. Mount blood directory: `-v /path/to/blood:/data/blood_dir`
-4. Ensure blood files follow naming pattern: `*_blood.tsv` or `*_inputfunction.tsv`
+1. Verify delay fitting is not set to "none" or "zero"
+2. Mount blood directory: `-v /path/to/blood:/data/blood_dir`
+3. Ensure blood files follow naming pattern: `*_blood.tsv` or `*_inputfunction.tsv`
 
 #### Report Generation Failures
 **Symptoms**: Reports not generated or show errors
@@ -475,7 +492,7 @@ region_definition_app(bids_dir = "/path/to/bids")
 ### Development Setup
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/kinfitrapp.git
+git clone https://github.com/mathesong/kinfitrapp.git
 cd kinfitrapp
 
 # Install development dependencies
@@ -488,6 +505,9 @@ R -e "devtools::load_all()"
 ### Testing
 
 #### R Package Testing
+
+Forthcoming...
+
 ```bash
 # Run package tests
 R -e "devtools::test()"
@@ -522,7 +542,7 @@ docker run --rm kinfitr:local --func modelling --help
 - Use `tidyverse` packages over base R equivalents
 - Include roxygen2 documentation for all exported functions
 - Write tests for core functionality
-- Use British English spelling in documentation and reports
+- British English spelling in documentation and reports
 
 ## License
 
@@ -530,15 +550,23 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Citation
 
-If you use kinfitrapp in your research, please cite:
+If you use kinfitrapp in your research, please cite *kinfitr for now*:
 
-```
-[Add appropriate citation information when available]
-```
+An introduction to the package:
+
+> Matheson, G. J. (2019). *Kinfitr: Reproducible PET Pharmacokinetic
+> Modelling in R*. bioRxiv: 755751. <https://doi.org/10.1101/755751>
+
+A validation study compared against commercial software:
+
+> Tjerkaski, J., Cervenka, S., Farde, L., & Matheson, G. J. (2020).
+> *Kinfitr – an open source tool for reproducible PET modelling:
+> Validation and evaluation of test-retest reliability*. bioRxiv:
+> 2020.02.20.957738. <https://doi.org/10.1101/2020.02.20.957738>
 
 ## Acknowledgments
 
-- Built on the kinfitr package for PET kinetic modeling
+- Built around the *kinfitr* package for PET kinetic modeling
 - Uses the Shiny framework for interactive web applications  
 - Docker implementation based on rocker/shiny-verse
 - Follows BIDS conventions for neuroimaging data organization

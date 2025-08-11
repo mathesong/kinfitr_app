@@ -48,7 +48,8 @@ generate_step_report <- function(step_name, analysis_folder, output_dir = NULL, 
       output_file = output_file,
       params = params,
       envir = new.env(),
-      quiet = TRUE
+      quiet = TRUE,
+      intermediates_dir = output_dir
     )
     
     cat("Generated report:", output_file, "\n")
@@ -116,7 +117,8 @@ generate_model_report <- function(model_type, model_number, analysis_folder,
       output_file = output_file,
       params = params,
       envir = new.env(),
-      quiet = TRUE
+      quiet = TRUE,
+      intermediates_dir = output_dir
     )
     
     cat("Generated report:", output_file, "\n")
@@ -203,7 +205,8 @@ generate_tstar_report <- function(analysis_folder, tstar_results = NULL, binding
       output_file = output_file,
       params = params,
       envir = new.env(),
-      quiet = TRUE
+      quiet = TRUE,
+      intermediates_dir = output_dir
     )
     
     cat("Generated report:", output_file, "\n")
