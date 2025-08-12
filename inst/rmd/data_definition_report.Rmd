@@ -95,6 +95,45 @@ tacdata <- tibble(
   # pet column already exists in the individual files, so don't rename
   select(-measurement, -desc, -basename, -filename)
 ```
+
+```{r tac-unit-conversion}
+# Function to detect TAC radioactivity units from TAC JSON sidecar files
+detect_tac_radioactivity_units <- function(tac_filename, analysis_folder) {
+  # Convert TSV filename to JSON filename for TAC sidecar file
+  json_filename <- str_replace(tac_filename, "\\.tsv$", ".json")
+  json_path <- file.path(analysis_folder, json_filename)
+  
+  if (file.exists(json_path)) {
+    # Try to read the TAC JSON sidecar file
+    tryCatch({
+      json_data <- jsonlite::fromJSON(json_path)
+      # Look for radioactivity column units (e.g., "Bq/mL", "kBq/mL")
+      if ("radioactivity" %in% names(json_data) && "Units" %in% names(json_data$radioactivity)) {
+        # Extract just the radioactivity part before the "/" using kinfitr function
+        full_units <- json_data$radioactivity$Units
+        rad_units <- kinfitr:::get_units_radioactivity(full_units)$rad
+        return(rad_units)
+      }
+    }, error = function(e) {
+      # If JSON reading fails, return Bq
+      return("Bq")
+    })
+  }
+  
+  # Default: assume Bq if no JSON metadata found
+  return("Bq")
+}
+
+# Apply TAC unit conversion to standardize to kBq
+tacdata <- tacdata %>%
+  group_by(pet) %>%
+  mutate(
+    detected_units = first(detect_tac_radioactivity_units(pet, analysis_folder)),
+    TAC = kinfitr::unit_convert(TAC, from_units = detected_units, to_units = "kBq")
+  ) %>%
+  select(-detected_units) %>%
+  ungroup()
+```
  
 Total measurements: `r length(unique(tacdata$pet))`
 

@@ -228,12 +228,6 @@ tac_data <- tac_data %>%
          frame_mid = frame_mid/60)
 ```
 
-```{r}
-### NOTE: Remove this when the data are fixed. TAC units are wrong:
-### They claim to be kBq, but they are actually Bq
-tac_data <- tac_data %>% 
-  mutate(TAC = TAC/1000)
-```
 
 ## Loading Blood Data
 
