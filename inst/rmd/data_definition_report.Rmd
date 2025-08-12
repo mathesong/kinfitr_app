@@ -97,42 +97,30 @@ tacdata <- tibble(
 ```
 
 ```{r tac-unit-conversion}
-# Function to detect TAC radioactivity units from TAC JSON sidecar files
-detect_tac_radioactivity_units <- function(tac_filename, analysis_folder) {
-  # Convert TSV filename to JSON filename for TAC sidecar file
-  json_filename <- str_replace(tac_filename, "\\.tsv$", ".json")
-  json_path <- file.path(analysis_folder, json_filename)
-  
-  if (file.exists(json_path)) {
-    # Try to read the TAC JSON sidecar file
-    tryCatch({
-      json_data <- jsonlite::fromJSON(json_path)
-      # Look for radioactivity column units (e.g., "Bq/mL", "kBq/mL")
-      if ("radioactivity" %in% names(json_data) && "Units" %in% names(json_data$radioactivity)) {
-        # Extract just the radioactivity part before the "/" using kinfitr function
-        full_units <- json_data$radioactivity$Units
-        rad_units <- kinfitr:::get_units_radioactivity(full_units)$rad
-        return(rad_units)
-      }
-    }, error = function(e) {
-      # If JSON reading fails, return Bq
-      return("Bq")
-    })
-  }
-  
-  # Default: assume Bq if no JSON metadata found
-  return("Bq")
-}
+# Read TAC units from combined regions JSON metadata
+combined_tacs_json <- file.path(dirname(analysis_folder), "desc-combinedregions_tacs.json")
 
-# Apply TAC unit conversion to standardize to kBq
-tacdata <- tacdata %>%
-  group_by(pet) %>%
-  mutate(
-    detected_units = first(detect_tac_radioactivity_units(pet, analysis_folder)),
-    TAC = kinfitr::unit_convert(TAC, from_units = detected_units, to_units = "kBq")
-  ) %>%
-  select(-detected_units) %>%
-  ungroup()
+if (file.exists(combined_tacs_json)) {
+  tryCatch({
+    json_metadata <- jsonlite::fromJSON(combined_tacs_json)
+    if ("radioactivity" %in% names(json_metadata) && "Units" %in% names(json_metadata$radioactivity)) {
+      original_tac_units_full <- json_metadata$radioactivity$Units
+      # Extract just radioactivity units (before "/mL")
+      original_tac_units <- kinfitr:::get_units_radioactivity(original_tac_units_full)$rad
+      cat("TAC units from combined regions JSON:", original_tac_units, "\n")
+      
+      # Apply unit conversion to standardize to kBq
+      tacdata <- tacdata %>%
+        mutate(TAC = kinfitr::unit_convert(TAC, from_units = original_tac_units, to_units = "kBq"))
+    } else {
+      cat("No radioactivity units found in JSON metadata, assuming already in kBq\n")
+    }
+  }, error = function(e) {
+    cat("Error reading JSON metadata, assuming TAC values already in kBq:", e$message, "\n")
+  })
+} else {
+  cat("Combined TACs JSON not found, assuming TAC values already in kBq\n")
+}
 ```
  
 Total measurements: `r length(unique(tacdata$pet))`
@@ -159,8 +147,23 @@ pet_framesummary <- tacdata %>%
     StartTime = min(frame_start)/60,
     EndTime = max(frame_end)/60,
     DurationSum = sum(frame_dur)/60,
-    MissingDuration = ((EndTime-StartTime)-DurationSum)/60
+    MissingDuration = ((EndTime-StartTime)-DurationSum)/60,
+    .groups = "drop"
   )
+
+# Add min/max TAC values per PET measurement
+tac_summary <- tacdata %>%
+  ungroup() %>%
+  group_by(pet) %>%
+  summarise(
+    MinTAC = round(min(TAC, na.rm = TRUE), 2),
+    MaxTAC = round(max(TAC, na.rm = TRUE), 2),
+    .groups = "drop"
+  )
+
+# Combine summaries
+pet_framesummary <- pet_framesummary %>%
+  left_join(tac_summary, by = "pet")
 
 kable(pet_framesummary)
 ```

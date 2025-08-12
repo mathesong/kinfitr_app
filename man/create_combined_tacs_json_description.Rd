@@ -7,6 +7,7 @@
 create_combined_tacs_json_description(
   participants_metadata,
   injected_radioactivity_units,
+  original_tac_units = "Bq",
   output_dir
 )
 }
@@ -14,6 +15,8 @@ create_combined_tacs_json_description(
 \item{participants_metadata}{Participants metadata from participants.json (can be NULL)}
 
 \item{injected_radioactivity_units}{Units for InjectedRadioactivity (can be NA)}
+
+\item{original_tac_units}{Original radioactivity units detected from source TACs files (default "Bq")}
 
 \item{output_dir}{Directory to save the JSON file}
 }

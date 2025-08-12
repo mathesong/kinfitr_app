@@ -41,6 +41,7 @@ generate_step_report <- function(step_name, analysis_folder, output_dir = NULL, 
     blood_dir = blood_dir
   )
   
+  
   # Generate report
   tryCatch({
     rmarkdown::render(

@@ -281,6 +281,7 @@ if( missing_frames > 0 ) {
 create_custom_weights  <- FALSE
 create_defined_weights <- FALSE
 
+
 if( config$Weights$method == "custom" ) {
   create_custom_weights  <- TRUE
   

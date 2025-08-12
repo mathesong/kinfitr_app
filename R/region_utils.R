@@ -668,6 +668,14 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
     dplyr::group_by(tacs_filename, morph_filename) %>%
     dplyr::group_nest(.key = "regions_data")
   
+  # Detect TAC units from the first TACs file for consistent metadata
+  original_tac_units <- "Bq"  # Default
+  if (nrow(file_groups) > 0) {
+    first_tacs_file <- file_groups$tacs_filename[1]
+    original_tac_units <- detect_original_tac_units(derivatives_folder, first_tacs_file)
+    cat("Detected TAC units from", first_tacs_file, ":", original_tac_units, "\n")
+  }
+  
   # Process all file pairs and collect results
   all_combined_data <- purrr::map_dfr(1:nrow(file_groups), function(i) {
     tacs_file <- file_groups$tacs_filename[i]
@@ -794,6 +802,14 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
     return(tibble::tibble())
   }
   
+  # Convert TAC data from original units to kBq for standardization
+  cat("Converting TAC data from", original_tac_units, "to kBq\n")
+  all_combined_data <- all_combined_data %>%
+    dplyr::mutate(
+      TAC = kinfitr::unit_convert(TAC, from_units = original_tac_units, to_units = "kBq"),
+      seg_meanTAC = kinfitr::unit_convert(seg_meanTAC, from_units = original_tac_units, to_units = "kBq")
+    )
+  
   # Save single consolidated TSV
   output_file <- file.path(output_dir, "desc-combinedregions_tacs.tsv")
   
@@ -803,11 +819,20 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
   if (!is.null(participant_data)) {
     if ("InjectedRadioactivity" %in% colnames(all_combined_data)) {
       create_combined_tacs_json_description(
-        participant_data$metadata, 
-        "kBq",  # Always kBq since we standardize to this unit
-        output_dir
+        participants_metadata = participant_data$metadata, 
+        injected_radioactivity_units = "kBq",  # Always kBq since we standardize to this unit
+        original_tac_units = "kBq",  # TAC units are now standardized to kBq
+        output_dir = output_dir
       )
     }
+  } else {
+    # Create JSON even without participant data, using kBq units
+    create_combined_tacs_json_description(
+      participants_metadata = NULL,
+      injected_radioactivity_units = "kBq", 
+      original_tac_units = "kBq",
+      output_dir = output_dir
+    )
   }
   
   cat("\n=== Consolidated Output Summary ===\n")
@@ -1185,16 +1210,50 @@ extract_pet_metadata <- function(bids_dir, sub, ses = NA, trc = NA, rec = NA, ta
   })
 }
 
+#' Detect TAC Radioactivity Units from Original TACs JSON Sidecar
+#'
+#' @description Helper function to detect radioactivity units from TACs JSON sidecar files
+#'
+#' @param derivatives_folder Base derivatives folder
+#' @param tacs_relative_path Relative path to TACs file  
+#' @return String with radioactivity units (e.g., "Bq", "kBq") or "Bq" as default
+detect_original_tac_units <- function(derivatives_folder, tacs_relative_path) {
+  # Convert TSV filename to JSON filename for TAC sidecar file
+  json_relative_path <- stringr::str_replace(tacs_relative_path, "\\.tsv$", ".json")
+  json_full_path <- file.path(derivatives_folder, json_relative_path)
+  
+  if (file.exists(json_full_path)) {
+    # Try to read the TAC JSON sidecar file
+    tryCatch({
+      json_data <- jsonlite::fromJSON(json_full_path)
+      # Look for radioactivity column units (e.g., "Bq/mL", "kBq/mL")
+      if ("radioactivity" %in% names(json_data) && "Units" %in% names(json_data$radioactivity)) {
+        # Extract just the radioactivity part before the "/" using kinfitr function
+        full_units <- json_data$radioactivity$Units
+        rad_units <- kinfitr:::get_units_radioactivity(full_units)$rad
+        return(rad_units)
+      }
+    }, error = function(e) {
+      # If JSON reading fails, return default
+      return("Bq")
+    })
+  }
+  
+  # Default: assume Bq if no JSON metadata found
+  return("Bq")
+}
+
 #' Create JSON Description File for Combined TACs
 #'
 #' @description Generate JSON metadata file describing columns in combined TACs file
 #'
 #' @param participants_metadata Participants metadata from participants.json (can be NULL)
 #' @param injected_radioactivity_units Units for InjectedRadioactivity (can be NA)
+#' @param original_tac_units Original radioactivity units detected from source TACs files (default "Bq")
 #' @param output_dir Directory to save the JSON file
 #' @return Path to created JSON file
 #' @export
-create_combined_tacs_json_description <- function(participants_metadata, injected_radioactivity_units, output_dir) {
+create_combined_tacs_json_description <- function(participants_metadata, injected_radioactivity_units, original_tac_units = "Bq", output_dir) {
   
   # Base column descriptions (following kinfitr BIDS pattern, excluding acq as it's deprecated)
   base_descriptions <- list(
@@ -1213,8 +1272,8 @@ create_combined_tacs_json_description <- function(participants_metadata, injecte
     "frame_end" = list("Description" = "Frame end time", "Units" = "seconds"),
     "frame_dur" = list("Description" = "Frame duration", "Units" = "seconds"),
     "frame_mid" = list("Description" = "Frame midpoint time", "Units" = "seconds"),
-    "seg_meanTAC" = list("Description" = "Volume-weighted mean TAC across all regions within the segmentation file (desc)"),
-    "TAC" = list("Description" = "Time Activity Curve value (volume-weighted average)")
+    "seg_meanTAC" = list("Description" = "Volume-weighted mean TAC across all regions within the segmentation file (desc)", "Units" = paste0(original_tac_units, "/mL")),
+    "TAC" = list("Description" = "Time Activity Curve value (volume-weighted average)", "Units" = paste0(original_tac_units, "/mL"))
   )
   
   # Add participant columns if available
@@ -1234,6 +1293,10 @@ create_combined_tacs_json_description <- function(participants_metadata, injecte
     "Units" = "kBq"
   )
   combined_descriptions[["InjectedRadioactivity"]] <- injected_desc
+  
+  # Add time and radioactivity metadata structures for report templates
+  combined_descriptions[["time"]] <- list("Units" = "s")
+  combined_descriptions[["radioactivity"]] <- list("Units" = paste0(original_tac_units, "/mL"))
   
   # Write JSON file
   output_file <- file.path(output_dir, "desc-combinedregions_tacs.json")

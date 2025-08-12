@@ -9,7 +9,14 @@
 A BIDS app implementation and shiny UI for performing PET kinetic modelling using kinfitr. Provides user interface forconfiguring kinetic modeling parameters for Time Activity Curves (TACs).
 }
 \author{
-\strong{Maintainer}: Granville Matheson \email{mathesong@gmail.com}
+\strong{Maintainer}: Granville Matheson \email{granville.matheson@ki.se}
+
+Other contributors:
+\itemize{
+  \item Alessio Giacomel \email{alessio.giacomel@kcl.ac.uk} [contributor]
+  \item Martin Noergaard \email{martin.noergaard@di.ku.dk} [contributor]
+  \item Anthony Galassi \email{anthony.galassi@nih.gov} [contributor]
+}
 
 }
 \keyword{internal}
