@@ -32,15 +32,53 @@ region_definition_app(bids_dir = "/path/to/bids")
 modelling_app(bids_dir = "/path/to/bids")
 ```
 
-### Docker Usage (Planned)
-Docker integration will support:
+### Container Usage
+
+The application supports both Docker and Singularity containers for flexible deployment:
+
+#### Docker Usage
+Docker integration supports:
 - Running processing without GUI using existing configurations
-- Launching apps for configuration setup
+- Launching apps for configuration setup  
 - Command options for specifying folder locations and processing modes
 
 ```bash
-# Docker setup is planned for future implementation
-docker-compose up
+# Interactive modelling app
+docker run -it --rm \
+  -v /path/to/bids:/data/bids_dir \
+  -p 3838:3838 \
+  mathesong/kinfitr:latest \
+  --func modelling
+
+# Automatic processing
+docker run --rm \
+  -v /path/to/derivatives:/data/derivatives_dir \
+  mathesong/kinfitr:latest \
+  --func modelling --mode automatic
+
+# Using docker-compose
+docker-compose up kinfitr-interactive
+```
+
+#### Singularity Usage
+Singularity implementation is ideal for HPC environments and shared computing resources:
+
+```bash
+# Build container
+cd singularity/
+./build.sh
+
+# Interactive modelling app  
+./run-interactive.sh --bids-dir /path/to/bids
+
+# Region definition app
+./run-regiondef.sh --bids-dir /path/to/bids
+
+# Automatic processing
+./run-automatic.sh --derivatives-dir /path/to/derivatives --blood-dir /path/to/blood
+
+# HPC batch processing
+./run-automatic.sh --derivatives-dir /data/derivatives --step weights
 ```
 
 ### Development
