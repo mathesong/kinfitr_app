@@ -544,26 +544,66 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              # Logan selection panel
                              conditionalPanel(
                                condition = "input.button == 'Logan'",
-                               numericInput("tstarIncludedFrames", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("vB_source", "vB Parameter Source:",
                                           choices = list("Set vB" = "set"),
                                           selected = "set"),
                                conditionalPanel(
                                  condition = "input.vB_source == 'set'",
                                  numericInput("vB_value", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
                              # MA1 selection panel
                              conditionalPanel(
                                condition = "input.button == 'MA1'",
-                               numericInput("tstarIncludedFrames", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("vB_source", "vB Parameter Source:",
                                           choices = list("Set vB" = "set"),
                                           selected = "set"),
                                conditionalPanel(
                                  condition = "input.vB_source == 'set'",
                                  numericInput("vB_value", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
@@ -590,45 +630,87 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              # refLogan selection panel  
                              conditionalPanel(
                                condition = "input.button == 'refLogan'",
-                               numericInput("tstarIncludedFrames", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("k2prime_source", "k2' Parameter Source:",
                                           choices = list("Set k2'" = "set"),
                                           selected = "set"),
-                               numericInput("k2prime_value", "k2' Value", value = 0.1, min = 0, step = 0.001)
+                               numericInput("k2prime_value", "k2' Value", value = 0.1, min = 0, step = 0.001),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
+                               )
                              ),
                              
                              # MRTM1 selection panel
                              conditionalPanel(
                                condition = "input.button == 'MRTM1'",
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
                                fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2.start", "k2.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.lower", "k2.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.upper", "k2.upper", value = 0.5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2a.start", "k2a.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.lower", "k2a.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.upper", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
                              # MRTM2 selection panel
                              conditionalPanel(
                                condition = "input.button == 'MRTM2'",
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("k2prime_source", "k2' Parameter Source:",
                                           choices = list("Set k2'" = "set"),
                                           selected = "set"),
-                               numericInput("k2prime_value", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
+                               numericInput("k2prime_value", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
+                               )
                              ),
                              
                              hr(),
@@ -764,7 +846,15 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              # Logan selection panel
                              conditionalPanel(
                                condition = "input.button2 == 'Logan'",
-                               numericInput("tstarIncludedFrames2", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type2", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("vB_source2", "vB Parameter Source:",
                                           choices = list(
                                             "Set vB" = "set",
@@ -776,12 +866,32 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.vB_source2 == 'set'",
                                  numericInput("vB_value2", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              # MA1 selection panel
                              conditionalPanel(
                                condition = "input.button2 == 'MA1'",
-                               numericInput("tstarIncludedFrames2", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type2", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("vB_source2", "vB Parameter Source:",
                                           choices = list(
                                             "Set vB" = "set",
@@ -793,6 +903,18 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.vB_source2 == 'set'",
                                  numericInput("vB_value2", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
@@ -819,7 +941,15 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              # refLogan selection panel  
                              conditionalPanel(
                                condition = "input.button2 == 'refLogan'",
-                               numericInput("tstarIncludedFrames2", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type2", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("k2prime_source2", "k2' Parameter Source:",
                                           choices = list(
                                             "Set k2'" = "set",
@@ -831,37 +961,59 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.k2prime_source2 == 'set'",
                                  numericInput("k2prime_value2", "k2' Value", value = 0.1, min = 0, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
                              # MRTM1 selection panel
                              conditionalPanel(
                                condition = "input.button2 == 'MRTM1'",
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type2", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
                                fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start2", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower2", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper2", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2.start2", "k2.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.lower2", "k2.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.upper2", "k2.upper", value = 0.5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2a.start2", "k2a.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.lower2", "k2a.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.upper2", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
                              # MRTM2 selection panel
                              conditionalPanel(
                                condition = "input.button2 == 'MRTM2'",
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start2", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower2", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper2", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type2", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("k2prime_source2", "k2' Parameter Source:",
                                           choices = list(
                                             "Set k2'" = "set",
@@ -873,6 +1025,18 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.k2prime_source2 == 'set'",
                                  numericInput("k2prime_value2", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type2", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
@@ -1015,7 +1179,15 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              # Logan selection panel
                              conditionalPanel(
                                condition = "input.button3 == 'Logan'",
-                               numericInput("tstarIncludedFrames3", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type3", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("vB_source3", "vB Parameter Source:",
                                           choices = list(
                                             "Set vB" = "set",
@@ -1030,12 +1202,32 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.vB_source3 == 'set'",
                                  numericInput("vB_value3", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              # MA1 selection panel
                              conditionalPanel(
                                condition = "input.button3 == 'MA1'",
-                               numericInput("tstarIncludedFrames3", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type3", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("vB_source3", "vB Parameter Source:",
                                           choices = list(
                                             "Set vB" = "set",
@@ -1050,6 +1242,18 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.vB_source3 == 'set'",
                                  numericInput("vB_value3", "vB Value", value = 0.05, min = 0, max = 1, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
@@ -1076,7 +1280,15 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              # refLogan selection panel  
                              conditionalPanel(
                                condition = "input.button3 == 'refLogan'",
-                               numericInput("tstarIncludedFrames3", "tstar", value = 10),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type3", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("k2prime_source3", "k2' Parameter Source:",
                                           choices = list(
                                             "Set k2'" = "set",
@@ -1091,37 +1303,59 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.k2prime_source3 == 'set'",
                                  numericInput("k2prime_value3", "k2' Value", value = 0.1, min = 0, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
                              # MRTM1 selection panel
                              conditionalPanel(
                                condition = "input.button3 == 'MRTM1'",
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type3", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
                                fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start3", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower3", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper3", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2.start3", "k2.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.lower3", "k2.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.upper3", "k2.upper", value = 0.5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2a.start3", "k2a.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.lower3", "k2a.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.upper3", "k2a.upper", value = 0.5,min = 0, step=.001)),
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
                              # MRTM2 selection panel
                              conditionalPanel(
                                condition = "input.button3 == 'MRTM2'",
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start3", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower3", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper3", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
+                               h4("t* Definition"),
+                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
+                               radioButtons("tstar_type3", "",
+                                           choices = list("Number of Frames (from the end)" = "frame", 
+                                                         "Time Point (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
+                               
+                               h4("Other Parameters"),
                                selectInput("k2prime_source3", "k2' Parameter Source:",
                                           choices = list(
                                             "Set k2'" = "set",
@@ -1136,6 +1370,18 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                conditionalPanel(
                                  condition = "input.k2prime_source3 == 'set'",
                                  numericInput("k2prime_value3", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
+                               ),
+                               
+                               # TAC Subset Selection
+                               h4("TAC Subset Selection"),
+                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
+                               radioButtons("subset_type3", "Selection Method:",
+                                           choices = list("Frame Numbers" = "frame", 
+                                                         "Time Points (minutes)" = "time"),
+                                           selected = "time", inline = TRUE),
+                               fluidRow(
+                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
+                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
                              
@@ -1337,15 +1583,27 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
             if (!is.null(model_config$tstar)) {
               updateNumericInput(session, paste0("tstarIncludedFrames", suffix), value = model_config$tstar %||% 10)
             }
+            if (!is.null(model_config$tstar_type)) {
+              updateRadioButtons(session, paste0("tstar_type", suffix), selected = model_config$tstar_type %||% "frame")
+            }
             if (!is.null(model_config$vB_source)) {
               updateSelectInput(session, paste0("vB_source", suffix), selected = model_config$vB_source %||% "set")
             }
             if (!is.null(model_config$vB_value)) {
               updateNumericInput(session, paste0("vB_value", suffix), value = model_config$vB_value %||% 0.05)
             }
+            # TAC Subset Selection restoration
+            if (!is.null(model_config$subset)) {
+              updateRadioButtons(session, paste0("subset_type", suffix), selected = model_config$subset$type %||% "time")
+              updateNumericInput(session, paste0("start_point", suffix), value = model_config$subset$start)
+              updateNumericInput(session, paste0("end_point", suffix), value = model_config$subset$end)
+            }
           } else if (!is.null(model_type) && model_type == "refLogan") {
             if (!is.null(model_config$tstar)) {
               updateNumericInput(session, paste0("tstarIncludedFrames", suffix), value = model_config$tstar %||% 10)
+            }
+            if (!is.null(model_config$tstar_type)) {
+              updateRadioButtons(session, paste0("tstar_type", suffix), selected = model_config$tstar_type %||% "frame")
             }
             if (!is.null(model_config$k2prime_source)) {
               updateSelectInput(session, paste0("k2prime_source", suffix), selected = model_config$k2prime_source %||% "set")
@@ -1353,7 +1611,13 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
             if (!is.null(model_config$k2prime_value)) {
               updateNumericInput(session, paste0("k2prime_value", suffix), value = model_config$k2prime_value %||% 0.1)
             }
-          } else if (!is.null(model_type) && (model_type == "SRTM" || model_type == "MRTM1")) {
+            # TAC Subset Selection restoration
+            if (!is.null(model_config$subset)) {
+              updateRadioButtons(session, paste0("subset_type", suffix), selected = model_config$subset$type %||% "time")
+              updateNumericInput(session, paste0("start_point", suffix), value = model_config$subset$start)
+              updateNumericInput(session, paste0("end_point", suffix), value = model_config$subset$end)
+            }
+          } else if (!is.null(model_type) && model_type == "SRTM") {
             if (!is.null(model_config$R1)) {
               updateNumericInput(session, paste0("R1.start", suffix), value = model_config$R1$start %||% 1)
               updateNumericInput(session, paste0("R1.lower", suffix), value = model_config$R1$lower %||% 0.0001)
@@ -1369,17 +1633,37 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
               updateNumericInput(session, paste0("k2a.lower", suffix), value = model_config$k2a$lower %||% 0.0001)
               updateNumericInput(session, paste0("k2a.upper", suffix), value = model_config$k2a$upper %||% 0.5)
             }
+          } else if (!is.null(model_type) && model_type == "MRTM1") {
+            if (!is.null(model_config$tstar)) {
+              updateNumericInput(session, paste0("tstarIncludedFrames", suffix), value = model_config$tstar %||% 10)
+            }
+            if (!is.null(model_config$tstar_type)) {
+              updateRadioButtons(session, paste0("tstar_type", suffix), selected = model_config$tstar_type %||% "frame")
+            }
+            # TAC Subset Selection restoration
+            if (!is.null(model_config$subset)) {
+              updateRadioButtons(session, paste0("subset_type", suffix), selected = model_config$subset$type %||% "time")
+              updateNumericInput(session, paste0("start_point", suffix), value = model_config$subset$start)
+              updateNumericInput(session, paste0("end_point", suffix), value = model_config$subset$end)
+            }
           } else if (!is.null(model_type) && model_type == "MRTM2") {
-            if (!is.null(model_config$R1)) {
-              updateNumericInput(session, paste0("R1.start", suffix), value = model_config$R1$start %||% 1)
-              updateNumericInput(session, paste0("R1.lower", suffix), value = model_config$R1$lower %||% 0.0001)
-              updateNumericInput(session, paste0("R1.upper", suffix), value = model_config$R1$upper %||% 5)
+            if (!is.null(model_config$tstar)) {
+              updateNumericInput(session, paste0("tstarIncludedFrames", suffix), value = model_config$tstar %||% 10)
+            }
+            if (!is.null(model_config$tstar_type)) {
+              updateRadioButtons(session, paste0("tstar_type", suffix), selected = model_config$tstar_type %||% "frame")
             }
             if (!is.null(model_config$k2prime_source)) {
               updateSelectInput(session, paste0("k2prime_source", suffix), selected = model_config$k2prime_source %||% "set")
             }
             if (!is.null(model_config$k2prime_value)) {
               updateNumericInput(session, paste0("k2prime_value", suffix), value = model_config$k2prime_value %||% 0.1)
+            }
+            # TAC Subset Selection restoration
+            if (!is.null(model_config$subset)) {
+              updateRadioButtons(session, paste0("subset_type", suffix), selected = model_config$subset$type %||% "time")
+              updateNumericInput(session, paste0("start_point", suffix), value = model_config$subset$start)
+              updateNumericInput(session, paste0("end_point", suffix), value = model_config$subset$end)
             }
           }
           
@@ -1729,17 +2013,45 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
           }
         } else if (model_type == "Logan" || model_type == "MA1") {
           model_params$tstar = input[[paste0("tstarIncludedFrames", suffix)]] %||% 10
+          model_params$tstar_type = input[[paste0("tstar_type", suffix)]] %||% "frame"
           model_params$vB_source = input[[paste0("vB_source", suffix)]] %||% "set"
           if (input[[paste0("vB_source", suffix)]] == "set" || is.null(input[[paste0("vB_source", suffix)]])) {
             model_params$vB_value = input[[paste0("vB_value", suffix)]] %||% 0.05
           }
+          
+          # TAC Subset Selection
+          subset_type <- input[[paste0("subset_type", suffix)]] %||% "time"
+          start_point <- input[[paste0("start_point", suffix)]]
+          end_point <- input[[paste0("end_point", suffix)]]
+          
+          if (!is.null(start_point) || !is.null(end_point)) {
+            model_params$subset = list(
+              type = subset_type,
+              start = start_point,
+              end = end_point
+            )
+          }
         } else if (model_type == "refLogan") {
           model_params$tstar = input[[paste0("tstarIncludedFrames", suffix)]] %||% 10
+          model_params$tstar_type = input[[paste0("tstar_type", suffix)]] %||% "frame"
           model_params$k2prime_source = input[[paste0("k2prime_source", suffix)]] %||% "set"
           if (input[[paste0("k2prime_source", suffix)]] == "set" || is.null(input[[paste0("k2prime_source", suffix)]])) {
             model_params$k2prime_value = input[[paste0("k2prime_value", suffix)]] %||% 0.1
           }
-        } else if (model_type == "SRTM" || model_type == "MRTM1") {
+          
+          # TAC Subset Selection
+          subset_type <- input[[paste0("subset_type", suffix)]] %||% "time"
+          start_point <- input[[paste0("start_point", suffix)]]
+          end_point <- input[[paste0("end_point", suffix)]]
+          
+          if (!is.null(start_point) || !is.null(end_point)) {
+            model_params$subset = list(
+              type = subset_type,
+              start = start_point,
+              end = end_point
+            )
+          }
+        } else if (model_type == "SRTM") {
           model_params$R1 = list(
             start = input[[paste0("R1.start", suffix)]] %||% 1,
             lower = input[[paste0("R1.lower", suffix)]] %||% 0.0001,
@@ -1755,15 +2067,41 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
             lower = input[[paste0("k2a.lower", suffix)]] %||% 0.0001,
             upper = input[[paste0("k2a.upper", suffix)]] %||% 0.5
           )
+        } else if (model_type == "MRTM1") {
+          model_params$tstar = input[[paste0("tstarIncludedFrames", suffix)]] %||% 10
+          model_params$tstar_type = input[[paste0("tstar_type", suffix)]] %||% "frame"
+          
+          # TAC Subset Selection
+          subset_type <- input[[paste0("subset_type", suffix)]] %||% "time"
+          start_point <- input[[paste0("start_point", suffix)]]
+          end_point <- input[[paste0("end_point", suffix)]]
+          
+          if (!is.null(start_point) || !is.null(end_point)) {
+            model_params$subset = list(
+              type = subset_type,
+              start = start_point,
+              end = end_point
+            )
+          }
         } else if (model_type == "MRTM2") {
-          model_params$R1 = list(
-            start = input[[paste0("R1.start", suffix)]] %||% 1,
-            lower = input[[paste0("R1.lower", suffix)]] %||% 0.0001,
-            upper = input[[paste0("R1.upper", suffix)]] %||% 5
-          )
+          model_params$tstar = input[[paste0("tstarIncludedFrames", suffix)]] %||% 10
+          model_params$tstar_type = input[[paste0("tstar_type", suffix)]] %||% "frame"
           model_params$k2prime_source = input[[paste0("k2prime_source", suffix)]] %||% "set"
           if (input[[paste0("k2prime_source", suffix)]] == "set" || is.null(input[[paste0("k2prime_source", suffix)]])) {
             model_params$k2prime_value = input[[paste0("k2prime_value", suffix)]] %||% 0.1
+          }
+          
+          # TAC Subset Selection
+          subset_type <- input[[paste0("subset_type", suffix)]] %||% "time"
+          start_point <- input[[paste0("start_point", suffix)]]
+          end_point <- input[[paste0("end_point", suffix)]]
+          
+          if (!is.null(start_point) || !is.null(end_point)) {
+            model_params$subset = list(
+              type = subset_type,
+              start = start_point,
+              end = end_point
+            )
           }
         }
         
