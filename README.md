@@ -65,8 +65,8 @@ devtools::install("path/to/kinfitrapp")
 
 ```bash
 # Clone the repository
-git clone https://github.com/mathesong/kinfitrapp.git
-cd kinfitrapp
+git clone https://github.com/mathesong/kinfitr_app.git
+cd kinfitr_app
 
 # Build the Docker image (this may take 10-15 minutes)
 docker build -f docker/Dockerfile -t kinfitr:local .
