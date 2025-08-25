@@ -8,6 +8,7 @@ This directory contains Docker implementation files for running the kinfitr regi
 ```bash
 # Modelling app (most common usage)
 docker run -it --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir \
   -p 3838:3838 \
   mathesong/kinfitr:latest \
@@ -15,6 +16,7 @@ docker run -it --rm \
 
 # Region definition app
 docker run -it --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir \
   -p 3838:3838 \
   mathesong/kinfitr:latest \
@@ -27,6 +29,7 @@ Then open http://localhost:3838 in your browser.
 ```bash
 # Full pipeline execution
 docker run -it --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/derivatives:/data/derivatives_dir \
   -v /path/to/blood:/data/blood_dir \
   mathesong/kinfitr:latest \
@@ -35,6 +38,7 @@ docker run -it --rm \
 
 # Single step execution
 docker run -it --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/derivatives:/data/derivatives_dir \
   mathesong/kinfitr:latest \
   --func modelling \
@@ -107,6 +111,7 @@ docker-compose up kinfitr-interactive
 ```bash
 # Run modelling app on server port 8080
 docker run -d --name kinfitr-server \
+  --user $(id -u):$(id -g) \
   -v /data/bids:/data/bids_dir \
   -p 8080:3838 \
   mathesong/kinfitr:latest \
@@ -118,6 +123,7 @@ docker run -d --name kinfitr-server \
 # Process multiple analyses automatically
 for analysis in Analysis1 Analysis2 Analysis3; do
   docker run --rm \
+    --user $(id -u):$(id -g) \
     -v /data/derivatives:/data/derivatives_dir \
     -v /data/blood:/data/blood_dir \
     mathesong/kinfitr:latest \

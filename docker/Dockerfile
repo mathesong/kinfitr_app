@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create user and group with specified IDs
-RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
-    useradd -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USER_NAME}
+RUN if ! getent group ${GROUP_ID}; then groupadd -g ${GROUP_ID} ${USER_NAME}; fi && \
+    if ! getent passwd ${USER_ID}; then useradd -u ${USER_ID} -g ${GROUP_ID} -m -s /bin/bash ${USER_NAME}; fi
 
 # Install additional R packages required by kinfitr
 RUN install2.r --error --skipinstalled \
@@ -40,14 +40,14 @@ RUN R -e "devtools::install('.', dependencies = TRUE)"
 COPY docker/run_kinfitr.R /app/
 RUN chmod +x /app/run_kinfitr.R
 
-# Change ownership of app directory to non-root user
-RUN chown -R ${USER_NAME}:${USER_NAME} /app
+# Change ownership of app directory to non-root user (use UID:GID to handle existing users)
+RUN chown -R ${USER_ID}:${GROUP_ID} /app
 
 # Create data directory and set permissions
-RUN mkdir -p /data && chown -R ${USER_NAME}:${USER_NAME} /data
+RUN mkdir -p /data && chown -R ${USER_ID}:${GROUP_ID} /data
 
 # Switch to non-root user
-USER ${USER_NAME}
+USER ${USER_ID}:${GROUP_ID}
 
 # Expose port 3838 for Shiny apps
 EXPOSE 3838

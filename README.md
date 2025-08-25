@@ -61,7 +61,14 @@ devtools::install("path/to/kinfitrapp")
 
 ### Docker Installation
 
-**Note**: Pre-built Docker images are not yet available on Docker Hub. Users must currently build the image locally from source.
+#### Option 1: Pull Pre-built Image (Recommended)
+
+```bash
+# Pull the latest pre-built image from Docker Hub
+docker pull mathesong/kinfitr_app:latest
+```
+
+#### Option 2: Build Manually from Source
 
 ```bash
 # Clone the repository
@@ -69,17 +76,14 @@ git clone https://github.com/mathesong/kinfitr_app.git
 cd kinfitr_app
 
 # Build the Docker image (this may take 10-15 minutes)
-docker build -f docker/Dockerfile -t kinfitr:local .
+docker build -f docker/Dockerfile -t mathesong/kinfitr_app:latest .
 
 # Alternatively, use docker-compose to build
 cd docker/
 docker-compose build
-
-# When pre-built images become available (future):
-# docker pull mathesong/kinfitr:latest
 ```
 
-**Building Requirements**:
+**Manual Building Requirements**:
 - Docker daemon with at least 4GB RAM allocated
 - ~10-15 minutes build time (downloads ~3GB base image)
 - ~5GB free disk space for final image
@@ -123,10 +127,11 @@ modelling_app(
 ```bash
 # Launch region definition app interactively
 docker run -it --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -p 3838:3838 \
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func regiondef
 
 # Then open http://localhost:3838 in your browser
@@ -136,11 +141,12 @@ docker run -it --rm \
 ```bash
 # Launch modelling app interactively
 docker run -it --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -v /path/to/your/blood:/data/blood_dir:ro \
   -p 3838:3838 \
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func modelling
 
 # Then open http://localhost:3838 in your browser
@@ -150,11 +156,12 @@ docker run -it --rm \
 ```bash
 # Launch modelling app in background
 docker run -d --name kinfitr-server \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -v /path/to/your/blood:/data/blood_dir:ro \
   -p 3838:3838 \
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func modelling
 
 # Check startup messages and get browser URL
@@ -171,19 +178,21 @@ docker rm kinfitr-server
 ```bash
 # Run complete analysis pipeline
 docker run --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -v /path/to/your/blood:/data/blood_dir:ro \
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func modelling \
   --mode automatic
 
 # Run specific analysis step
 docker run --rm \
+  --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -v /path/to/your/blood:/data/blood_dir:ro \
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func modelling \
   --mode automatic \
   --step weights
@@ -306,10 +315,11 @@ Blood data is only required when:
 ```bash
 # Automatic validation - only mount blood when needed
 docker run --rm \
+  --user $(id -u):$(id -g) \
   -v /study/bids:/data/bids_dir:ro \
   -v /study/derivatives:/data/derivatives_dir:rw \
   -v /study/blood:/data/blood_dir:ro \  # Only needed for invasive + delay
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func modelling --mode automatic --step delay
 ```
 
@@ -317,11 +327,12 @@ docker run --rm \
 ```bash
 # Production server deployment
 docker run -d --name kinfitr-server \
+  --user $(id -u):$(id -g) \
   --restart unless-stopped \
   -v /data/studies:/data/bids_dir:ro \
   -v /data/derivatives:/data/derivatives_dir:rw \
   -p 8080:3838 \
-  kinfitr:local \
+  mathesong/kinfitr_app:latest \
   --func modelling
 
 # Access at http://your-server:8080
@@ -515,11 +526,11 @@ R -e "devtools::test()"
 
 #### Docker Build and Testing
 ```bash
-# Test Docker build (use kinfitr:local tag for consistency)
-docker build -f docker/Dockerfile -t kinfitr:local .
+# Test Docker build
+docker build -f docker/Dockerfile -t mathesong/kinfitr_app:latest .
 
 # Test Docker functionality
-docker run --rm kinfitr:local --help
+docker run --rm mathesong/kinfitr_app:latest --help
 
 # Test with docker-compose (recommended for development)
 cd docker/
@@ -527,7 +538,7 @@ docker-compose build
 docker-compose up kinfitr-interactive
 
 # Verify the build worked with a simple test
-docker run --rm kinfitr:local --func modelling --help
+docker run --rm mathesong/kinfitr_app:latest --func modelling --help
 ```
 
 #### Build Troubleshooting
