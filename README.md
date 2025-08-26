@@ -1,4 +1,4 @@
-# kinfitrapp: kinfitr BIDS App Configuration Interface
+# kinfitr_app: kinfitr BIDS App for Kinetic Modelling of PET Data
 
 An R Shiny web application suite for creating customized kinfitr BIDS App configuration files for PET imaging analysis. This package provides an intuitive user interface for configuring kinetic modeling parameters for Time Activity Curves (TACs), with support for both interactive GUI-based configuration and automated batch processing.
 
