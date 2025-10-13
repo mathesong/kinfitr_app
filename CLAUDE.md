@@ -154,6 +154,87 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
 12. **Parameterised Reports**: Automatically generate HTML reports for each analysis step for quality control and review
 13. **Segmentation Mean TACs**: Pre-calculated volume-weighted mean TACs for external segmentations to avoid BIDS directory access during weights calculation
 
+### Region Definition and File Matching System
+
+The region definition app uses a sophisticated seg/label-based matching system conforming to the PET Preprocessing Derivatives BIDS specification.
+
+#### BIDS Entity-Based Matching
+
+**Primary Matching Attributes** (required for matching):
+- `sub`: Subject identifier (exact match required)
+- `seg`: Segmentation type (e.g., "gtm", "wm") - exact match required
+- `label`: Region label (e.g., "semiovale") - exact match required
+- Files must have either `seg` OR `label` attribute
+
+**Hierarchical Matching Attributes** (optional, hierarchical):
+- `ses`: Session identifier - hierarchical match (morph without ses matches all ses values)
+- `run`: Run identifier - hierarchical match (morph without run matches all run values)
+
+**Ignored Attributes** (for matching purposes):
+- `pvc`: Partial volume correction variant (e.g., "AGTM") - shown in UI but not used for matching
+- `desc`: Description field - not used for matching
+- `rec`: Reconstruction field - not used for matching
+- `task`: Task field - not used for matching
+
+#### Matching Logic
+
+**Exact Match Requirements:**
+1. Subject (`sub`) must match exactly between tacs and morph files
+2. Segmentation (`seg`) OR label (`label`) must match exactly
+
+**Hierarchical Match Behavior:**
+- If morph file has `ses`, tacs file must have same `ses` value
+- If morph file lacks `ses`, it matches ALL `ses` values for that subject
+- Same logic applies to `run` attribute
+- This enables one-to-many relationships: one morph file can serve multiple tacs variants
+
+**Example Matching Scenarios:**
+```
+# One-to-many: Different pvc variants share same morph
+sub-P3_pvc-AGTM_seg-gtm_tacs.tsv  → sub-P3_seg-gtm_morph.tsv
+sub-P3_seg-gtm_tacs.tsv            → sub-P3_seg-gtm_morph.tsv
+
+# Hierarchical: Morph without ses/run matches all variants
+sub-P3_ses-01_run-1_seg-gtm_tacs.tsv → sub-P3_seg-gtm_morph.tsv
+sub-P3_ses-01_run-2_seg-gtm_tacs.tsv → sub-P3_seg-gtm_morph.tsv
+sub-P3_ses-02_run-1_seg-gtm_tacs.tsv → sub-P3_seg-gtm_morph.tsv
+
+# Label-based matching
+sub-P3_label-semiovale_tacs.tsv    → sub-P3_label-semiovale_morph.tsv
+```
+
+#### Directory Structure Support
+
+**Flexible File Organization:**
+- Supports both flat and hierarchical directory structures
+- Recursive search within pipeline folders finds files in any subdirectory depth
+- Common patterns:
+  - `pet/` subdirectory for tacs files
+  - `anat/` subdirectory for morph files
+  - Flat structure with all files in same directory
+
+#### Volume Fallback Behavior
+
+**Missing Morph Files:**
+- If no matching morph file found: uses `volume=1` for all regions (equal weighting)
+- Warning message references "PET Preprocessing Derivatives BIDS specification"
+- Region combination still proceeds successfully
+- Files without `seg` or `label` attributes are silently filtered
+
+#### Performance Optimization
+
+**Efficient Bulk Matching:**
+- One recursive file search per pipeline folder (not per file)
+- `create_tacs_morph_mapping()` function creates complete mapping upfront
+- Uses `dplyr` joins instead of loops for matching logic
+- Handles thousands of files efficiently
+
+**Key Functions:**
+- `extract_bids_attributes_from_filename()`: Parses BIDS entities from filenames
+- `create_tacs_morph_mapping()`: Bulk matching using dplyr joins
+- `get_region_volumes_from_morph()`: Reads morph files with volume=1 fallback
+- `combine_single_region_tac()`: Volume-weighted TAC combination with fallback support
+
 ### Interactive Data Exploration System
 
 The modelling app includes a dedicated Interactive tab for manual data exploration and validation:
@@ -697,6 +778,47 @@ This ensures users can seamlessly continue work with existing configurations eve
 - Checkbox inputs for optional parameter fitting
 
 ## Troubleshooting
+
+### No TACs Files Found or Matched
+**Symptom**: Region definition app shows no available TACs files or no matches found
+
+**Root Cause**: Files missing required `seg` or `label` attributes
+
+**Diagnostic Steps**:
+1. Verify TACs files follow BIDS naming: `sub-X_seg-Y_tacs.tsv` or `sub-X_label-Y_tacs.tsv`
+2. Check that morph files also have matching `seg` or `label` attributes
+3. Ensure files are within the derivatives pipeline folder
+
+**Solutions**:
+- Add `seg` or `label` attributes to filenames following BIDS specification
+- Files without these attributes will be silently filtered (by design)
+- Use PET Preprocessing Derivatives BIDS specification compliant naming
+
+### TACs and Morph Files Not Matching
+**Symptom**: TACs files found but no morph files matched, using volume=1 fallback
+
+**Root Cause**: Mismatch in `seg`/`label` attributes or subject identifiers
+
+**Diagnostic Steps**:
+1. Verify `sub` values match exactly between tacs and morph files
+2. Check `seg` or `label` values match exactly (case-sensitive)
+3. Confirm morph files are in same pipeline folder or subdirectories
+
+**Example Issue:**
+```
+# Won't match - seg values differ
+sub-P3_seg-gtm_tacs.tsv     → No match
+sub-P3_seg-GTM_morph.tsv    → (case mismatch)
+
+# Will match
+sub-P3_seg-gtm_tacs.tsv     → sub-P3_seg-gtm_morph.tsv
+```
+
+**Solutions**:
+- Ensure exact case-sensitive match for `seg`/`label` values
+- Verify subject identifiers are identical
+- Check files are in correct pipeline folder
+- If intentional: volume=1 fallback will proceed with equal weighting
 
 ### Combined TACs File Not Generated
 **Symptom**: `modelling_app()` processes files but doesn't create `desc-combinedregions_tacs.tsv`

@@ -30,54 +30,54 @@ determine_blood_source <- function(analysis_folder, bids_dir = NULL) {
   return("none")
 }
 
-#' Get Blood Data Loading Status
-#'
-#' @description Check blood data availability without loading (for status display)
-#'
-#' @param blood_dir Character string path to blood data directory (optional)
-#' @param analysis_folder Character string path to analysis folder
-#' @param bids_dir Character string path to BIDS directory (optional)
-#' 
-#' @return List containing:
-#'   - has_blood_dir: Logical, blood data available in blood_dir
-#'   - has_analysis_blood: Logical, blood data available in analysis_folder  
-#'   - has_bids_blood: Logical, blood data available in bids_dir
-#'   - priority_source: Character string indicating which source would be used
-#' @export
-get_blood_data_status <- function(blood_dir = NULL, analysis_folder, bids_dir = NULL) {
-  
-  has_blood_dir <- if (!is.null(blood_dir)) {
-    length(list.files(blood_dir, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)) > 0
-  } else {
-    FALSE
-  }
-  
-  has_analysis_blood <- length(list.files(analysis_folder, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)) > 0
-  
-  has_bids_blood <- if (!is.null(bids_dir) && dir.exists(bids_dir)) {
-    length(list.files(bids_dir, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)) > 0
-  } else {
-    FALSE
-  }
-  
-  # Determine priority source
-  priority_source <- if (has_blood_dir) {
-    "blood_dir"
-  } else if (has_analysis_blood) {
-    "analysis_folder"
-  } else if (has_bids_blood) {
-    "bids_dir"  
-  } else {
-    "none"
-  }
-  
-  return(list(
-    has_blood_dir = has_blood_dir,
-    has_analysis_blood = has_analysis_blood,
-    has_bids_blood = has_bids_blood,
-    priority_source = priority_source
-  ))
-}
+#' #' Get Blood Data Loading Status
+#' #'
+#' #' @description Check blood data availability without loading (for status display)
+#' #'
+#' #' @param blood_dir Character string path to blood data directory (optional)
+#' #' @param analysis_folder Character string path to analysis folder
+#' #' @param bids_dir Character string path to BIDS directory (optional)
+#' #' 
+#' #' @return List containing:
+#' #'   - has_blood_dir: Logical, blood data available in blood_dir
+#' #'   - has_analysis_blood: Logical, blood data available in analysis_folder  
+#' #'   - has_bids_blood: Logical, blood data available in bids_dir
+#' #'   - priority_source: Character string indicating which source would be used
+#' #' @export
+#' get_blood_data_status <- function(blood_dir = NULL, analysis_folder, bids_dir = NULL) {
+#'   
+#'   has_blood_dir <- if (!is.null(blood_dir)) {
+#'     length(list.files(blood_dir, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)) > 0
+#'   } else {
+#'     FALSE
+#'   }
+#'   
+#'   has_analysis_blood <- length(list.files(analysis_folder, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)) > 0
+#'   
+#'   has_bids_blood <- if (!is.null(bids_dir) && dir.exists(bids_dir)) {
+#'     length(list.files(bids_dir, pattern = "_(blood|inputfunction)\\.tsv$", recursive = TRUE)) > 0
+#'   } else {
+#'     FALSE
+#'   }
+#'   
+#'   # Determine priority source
+#'   priority_source <- if (has_blood_dir) {
+#'     "blood_dir"
+#'   } else if (has_analysis_blood) {
+#'     "analysis_folder"
+#'   } else if (has_bids_blood) {
+#'     "bids_dir"  
+#'   } else {
+#'     "none"
+#'   }
+#'   
+#'   return(list(
+#'     has_blood_dir = has_blood_dir,
+#'     has_analysis_blood = has_analysis_blood,
+#'     has_bids_blood = has_bids_blood,
+#'     priority_source = priority_source
+#'   ))
+#' }
 
 #' Save inputfunction.tsv data from a blooddata object
 #'

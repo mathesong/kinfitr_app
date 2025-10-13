@@ -3,57 +3,70 @@
 #' @description Core function for volume-weighted averaging of constituent regions
 #'
 #' @param tacs_data TACs tibble in wide format (regions as columns)
-#' @param morph_data Morph tibble with volume data
+#' @param morph_data Morph tibble with volume data (can be NULL for volume=1 fallback)
 #' @param constituent_regions Vector of region names to combine
 #' @param region_name Name for the combined region
 #' @return Single tibble with combined TAC and total volume
 #' @export
 combine_single_region_tac <- function(tacs_data, morph_data, constituent_regions, region_name) {
-  
+
   # Validate inputs with graceful handling
   if (is.null(tacs_data) || nrow(tacs_data) == 0) {
     warning(paste("TACs data is empty or NULL for", region_name, "- excluding from output"))
     return(tibble::tibble())
   }
-  
-  if (is.null(morph_data) || nrow(morph_data) == 0) {
-    warning(paste("Morph data is empty or NULL for", region_name, "- excluding from output"))
-    return(tibble::tibble())
-  }
-  
+
   if (length(constituent_regions) == 0) {
     warning(paste("No constituent regions provided for", region_name, "- excluding from output"))
     return(tibble::tibble())
   }
-  
-  # Check which constituent regions are available in both datasets
-  # Note: readr::read_tsv preserves hyphens in column names, so no conversion needed
+
+  # Check which constituent regions are available in tacs
   available_in_tacs <- constituent_regions[constituent_regions %in% colnames(tacs_data)]
-  available_in_morph <- constituent_regions[constituent_regions %in% morph_data$name]
-  available_regions <- intersect(available_in_tacs, available_in_morph)
-  
-  if (length(available_regions) == 0) {
+
+  if (length(available_in_tacs) == 0) {
     # GRACEFUL: Return empty tibble instead of stopping
-    warning(paste("No constituent regions found for", region_name, ":",
-                  paste(constituent_regions, collapse = ", "), 
+    warning(paste("No constituent regions found in TACs data for", region_name, ":",
+                  paste(constituent_regions, collapse = ", "),
                   "- excluding from output"))
     return(tibble::tibble())
   }
-  
-  if (length(available_regions) < length(constituent_regions)) {
-    missing_regions <- setdiff(constituent_regions, available_regions)
-    # GRACEFUL: Warning instead of error
-    warning(paste("Some constituent regions not found for", region_name, ":", 
-                  paste(missing_regions, collapse = ", "), 
-                  "- using available regions only"))
+
+  # Handle morph data: use volume=1 fallback if NULL or missing volume-mm3 column
+  if (is.null(morph_data) || !"volume-mm3" %in% colnames(morph_data)) {
+    # Use volume=1 for all regions (equal weighting)
+    region_volumes <- tibble::tibble(
+      name = available_in_tacs,
+      `volume-mm3` = 1.0
+    )
+    available_regions <- available_in_tacs
+  } else {
+    # Use actual volumes from morph data
+    available_in_morph <- constituent_regions[constituent_regions %in% morph_data$name]
+    available_regions <- intersect(available_in_tacs, available_in_morph)
+
+    if (length(available_regions) == 0) {
+      # GRACEFUL: Return empty tibble instead of stopping
+      warning(paste("No constituent regions found for", region_name, ":",
+                    paste(constituent_regions, collapse = ", "),
+                    "- excluding from output"))
+      return(tibble::tibble())
+    }
+
+    if (length(available_regions) < length(constituent_regions)) {
+      missing_regions <- setdiff(constituent_regions, available_regions)
+      # GRACEFUL: Warning instead of error
+      warning(paste("Some constituent regions not found for", region_name, ":",
+                    paste(missing_regions, collapse = ", "),
+                    "- using available regions only"))
+    }
+
+    # Filter morph data for available regions
+    region_volumes <- morph_data %>%
+      dplyr::filter(name %in% available_regions) %>%
+      dplyr::select(name, `volume-mm3`)
   }
-  
-  # Filter morph data for available regions
-  # Note: readr::read_tsv preserves "volume-mm3" as is, no conversion to volume.mm3
-  region_volumes <- morph_data %>%
-    dplyr::filter(name %in% available_regions) %>%
-    dplyr::select(name, `volume-mm3`)
-  
+
   # Calculate total volume
   total_volume <- sum(region_volumes$`volume-mm3`)
   
@@ -99,182 +112,109 @@ combine_single_region_tac <- function(tacs_data, morph_data, constituent_regions
 
 #' Create kinfitr Regions Files Mapping
 #'
-#' @description Creates file mapping TSV linking regions to their TACs/morph files
+#' @description Creates file mapping TSV linking regions to their TACs/morph files using seg/label-based matching
 #'
 #' @param kinfitr_regions_file Path to kinfitr_regions.tsv
 #' @param derivatives_folder Base path to derivatives folder
 #' @return Creates kinfitr_regions_files.tsv and returns the mapping data
 #' @export
 create_kinfitr_regions_files <- function(kinfitr_regions_file, derivatives_folder) {
-  
+
   # Validate inputs
   if (!file.exists(kinfitr_regions_file)) {
     stop(paste("kinfitr_regions.tsv file not found:", kinfitr_regions_file))
   }
-  
+
   if (!dir.exists(derivatives_folder)) {
     stop(paste("Derivatives folder not found:", derivatives_folder))
   }
-  
+
   # Read kinfitr_regions.tsv
   regions_config <- readr::read_tsv(kinfitr_regions_file, show_col_types = FALSE)
-  
+
   if (nrow(regions_config) == 0) {
     stop("kinfitr_regions.tsv is empty")
   }
-  
-  # Get unique folder/description combinations
-  unique_configs <- regions_config %>%
-    dplyr::select(folder, description) %>%
-    dplyr::distinct()
-  
-  # Find corresponding files for each unique configuration
-  file_mappings <- purrr::map_dfr(1:nrow(unique_configs), function(i) {
-    folder_name <- unique_configs$folder[i]
-    description <- unique_configs$description[i]
-    
-    # Search for files matching this configuration
+
+  # Get unique folder combinations
+  unique_folders <- unique(regions_config$folder)
+
+  # Create tacs-morph mappings for each folder using new matching system
+  all_mappings <- purrr::map_dfr(unique_folders, function(folder_name) {
     folder_path <- file.path(derivatives_folder, folder_name)
-    
+
     if (!dir.exists(folder_path)) {
       warning(paste("Folder not found:", folder_path))
       return(tibble::tibble())
     }
-    
-    # Step 1: Find ALL TACs files (including hemi files, excluding combined files)
-    all_tacs_files <- list.files(folder_path, pattern = "*_tacs\\.tsv$", 
-                                recursive = TRUE, full.names = TRUE)
-    # Exclude combined TACs files
-    all_tacs_files <- all_tacs_files[!grepl("desc-combinedregions_tacs\\.tsv$", all_tacs_files)]
-    
-    if (length(all_tacs_files) == 0) {
-      warning(paste("No TACs files found in", folder_path))
+
+    # Use efficient bulk matching
+    cat("Creating tacs-morph mapping for folder:", folder_name, "\n")
+    mapping <- create_tacs_morph_mapping(folder_path)
+
+    if (nrow(mapping) == 0) {
+      warning(paste("No tacs files with seg/label found in", folder_path))
       return(tibble::tibble())
     }
-    
-    # Step 2: Parse all TACs files using BIDS parsing
-    parsed_files <- tryCatch({
-      kinfitr::bids_parse_files(folder_path)
-    }, error = function(e) {
-      warning(paste("Error parsing BIDS files in", folder_path, ":", e$message))
-      return(NULL)
-    })
-    
-    if (is.null(parsed_files) || length(parsed_files$filedata) == 0) {
-      warning(paste("No valid BIDS files found in", folder_path))
-      return(tibble::tibble())
-    }
-    
-    # Step 3: Parse description from kinfitr_regions.tsv into key-value pairs
-    description_attributes <- extract_bids_attributes_from_filename(description)
-    
-    # Step 4: Filter parsed files using inner_join to match all key-value pairs
-    matched_files <- tryCatch({
-      # Combine main-level and filedata-level BIDS attributes
-      files_with_attrs <- parsed_files %>%
-        tidyr::unnest(filedata) %>%
-        dplyr::filter(measurement == "tacs") %>%
-        # Select relevant BIDS attributes from both levels
-        dplyr::select(sub, ses, trc, rec, task, run, desc, hemi, pvc, path)
-      
-      # Match files where ALL non-identifier attributes are identical
-      # Individual identifiers to exclude from matching: sub, ses, trc, rec, task, run, pet
-      identifier_cols <- c("sub", "ses", "trc", "rec", "task", "run", "pet")
-      
-      # Get non-identifier attributes from description
-      desc_attrs <- description_attributes %>%
-        dplyr::select(-any_of(identifier_cols))
-      
-      # Match on desc, hemi, and pvc attributes (with NA when not present)
-      # Standardize description attributes to include hemi and pvc as NA if missing
-      desc_standardized <- tibble::tibble(
-        desc = description_attributes$desc,
-        hemi = if("hemi" %in% names(description_attributes)) description_attributes$hemi else NA_character_,
-        pvc = if("pvc" %in% names(description_attributes)) description_attributes$pvc else NA_character_
-      )
-      
-      # Match files with identical desc, hemi, and pvc values (using coalesce for NA matching)
-      matched_files_list <- files_with_attrs %>%
-        dplyr::filter(
-          desc == desc_standardized$desc,
-          dplyr::coalesce(hemi, "NA") == dplyr::coalesce(desc_standardized$hemi, "NA"),
-          dplyr::coalesce(pvc, "NA") == dplyr::coalesce(desc_standardized$pvc, "NA")
-        )
-      
-      matched <- matched_files_list
-      
-      # Check if path column exists and select appropriately
-      if ("path" %in% colnames(matched)) {
-        matched <- matched %>% dplyr::select(filename = path, desc)
-      } else {
-        warning("Path column not found after join")
-        return(tibble::tibble())
-      }
-      
-      matched
-    }, error = function(e) {
-      warning(paste("Error filtering BIDS files:", e$message))
-      return(tibble::tibble())
-    })
-    
-    if (nrow(matched_files) == 0) {
-      warning(paste("No files matched description", description, "in", folder_path))
-      return(tibble::tibble())
-    }
-    
-    # Step 4: Create file pairs for matched files
-    file_pairs <- purrr::map_dfr(matched_files$filename, function(tacs_file) {
-      # tacs_file contains relative path like "sub-01/ses-baseline/filename.tsv"
-      tacs_relative_path <- as.character(tacs_file)
-      
-      # Generate corresponding morph filename by replacing the suffix
-      morph_relative_path <- stringr::str_replace(tacs_relative_path, "_tacs\\.tsv$", "_morph.tsv")
-      
-      # Construct full paths to check if morph file exists
-      morph_full_path <- file.path(folder_path, morph_relative_path)
-      
-      if (!file.exists(morph_full_path)) {
-        warning(paste("Corresponding morph file not found:", morph_relative_path))
-        return(tibble::tibble())
-      }
-      
-      # Return relative paths from derivatives folder
-      tibble::tibble(
+
+    # Extract descriptions from tacs files
+    mapping <- mapping %>%
+      dplyr::mutate(
         folder = folder_name,
-        description = description,
-        tacs_filename = file.path(folder_name, tacs_relative_path),
-        morph_filename = file.path(folder_name, morph_relative_path)
+        # Extract full filename from path for matching with description
+        tacs_basename = basename(tacs_path),
+        # Create relative paths from derivatives folder
+        tacs_filename = stringr::str_replace(tacs_path, paste0("^", derivatives_folder, "/?"), ""),
+        morph_filename = dplyr::if_else(
+          !is.na(morph_path),
+          stringr::str_replace(morph_path, paste0("^", derivatives_folder, "/?"), ""),
+          NA_character_
+        )
       )
-    })
-    
-    return(file_pairs)
+
+    return(mapping)
   })
-  
-  if (nrow(file_mappings) == 0) {
-    stop("No valid TACs/morph file pairs found")
+
+  if (nrow(all_mappings) == 0) {
+    stop("No valid TACs files with seg/label attributes found")
   }
-  
+
+  # Match tacs files to descriptions using filename patterns
+  # Extract descriptions from tacs filenames
+  all_mappings <- all_mappings %>%
+    dplyr::mutate(
+      # Extract description string from tacs filename (all attributes except sub, ses, trc, rec, task, run)
+      description_parsed = purrr::map(tacs_basename, extract_bids_attributes_from_filename)
+    ) %>%
+    tidyr::unnest(description_parsed) %>%
+    dplyr::mutate(
+      # Create description string from all non-identifier attributes
+      description = create_bids_key_value_pairs(
+        dplyr::cur_data(),
+        setdiff(colnames(dplyr::cur_data()), c("tacs_path", "morph_path", "folder", "tacs_basename", "tacs_filename", "morph_filename", "sub", "ses", "trc", "rec", "task", "run", "pet"))
+      )$description
+    )
+
   # Join with original regions config
   regions_files <- regions_config %>%
-    dplyr::left_join(file_mappings, by = c("folder", "description"))
-  
-  # Remove rows where files weren't found
-  regions_files <- regions_files %>%
-    dplyr::filter(!is.na(tacs_filename), !is.na(morph_filename))
-  
+    dplyr::inner_join(
+      all_mappings %>% dplyr::select(folder, description, tacs_filename, morph_filename),
+      by = c("folder", "description")
+    )
+
   if (nrow(regions_files) == 0) {
-    stop("No regions could be matched to valid file pairs")
+    stop("No regions could be matched to valid file pairs. Check that descriptions in kinfitr_regions.tsv match the tacs file attributes.")
   }
-  
+
   # Write to output file
   output_dir <- dirname(kinfitr_regions_file)
   output_file <- file.path(output_dir, "kinfitr_regions_files.tsv")
-  
+
   readr::write_tsv(regions_files, output_file)
-  
+
   cat("Created kinfitr_regions_files.tsv with", nrow(regions_files), "region-file mappings\n")
   cat("Output file:", output_file, "\n")
-  
+
   return(regions_files)
 }
 
@@ -468,20 +408,20 @@ process_all_kinfitr_regions <- function(kinfitr_regions_files_path, derivatives_
 #' @description Extract BIDS key-value pairs from filename following bloodstream pattern
 #'
 #' @param filename Filename to parse (can be full path or basename)
-#' @return Tibble with BIDS attributes (sub, ses, trc, rec, task, run, desc, pet)
+#' @return Tibble with BIDS attributes (sub, ses, trc, rec, task, run, desc, seg, label, pet, plus any additional attributes like pvc)
 #' @export
 extract_bids_attributes_from_filename <- function(filename) {
   # Parse filename to extract BIDS key-value pairs
-  # Required: sub, ses, trc, rec, task, run, desc, pet
-  # Optional: any other key-value pairs found in filename
+  # Required: sub, ses, trc, rec, task, run, desc, seg, label, pet
+  # Additional: pvc and any other key-value pairs found in filename
   # IMPORTANT: Extract only VALUES, not key-value pairs (e.g., "01" not "sub-01")
-  
+
   basename_file <- basename(filename)
-  
+
   # Extract all key-value pairs from filename using regex
   # Pattern matches: key-value where key is letters and value is alphanumeric/hyphens
   matches <- stringr::str_extract_all(basename_file, "([a-zA-Z]+)-([a-zA-Z0-9]+)")[[1]]
-  
+
   # Parse matches into key-value pairs
   attributes <- list()
   for (match in matches) {
@@ -492,7 +432,7 @@ extract_bids_attributes_from_filename <- function(filename) {
       attributes[[key]] <- value
     }
   }
-  
+
   # Always include required attributes (set to NA if missing)
   result <- tibble::tibble(
     sub = attributes[["sub"]] %||% NA_character_,
@@ -501,25 +441,212 @@ extract_bids_attributes_from_filename <- function(filename) {
     rec = attributes[["rec"]] %||% NA_character_,
     task = attributes[["task"]] %||% NA_character_,
     run = attributes[["run"]] %||% NA_character_,
-    desc = attributes[["desc"]] %||% NA_character_
+    desc = attributes[["desc"]] %||% NA_character_,
+    seg = attributes[["seg"]] %||% NA_character_,
+    label = attributes[["label"]] %||% NA_character_
   )
-  
+
   # Create pet column (following bloodstream pattern) - PET measurement identifier
   # Remove desc and measurement suffix to get the core PET identifier
   pet <- basename_file %>%
     stringr::str_remove("_desc-[^_]+.*$") %>%  # Remove desc and everything after
     stringr::str_remove("_tacs\\.tsv$")       # Remove measurement suffix if still there
   result$pet <- pet
-  
+
   # Add any other attributes found (excluding the required ones already added)
-  required_keys <- c("sub", "ses", "trc", "rec", "task", "run", "desc")
+  required_keys <- c("sub", "ses", "trc", "rec", "task", "run", "desc", "seg", "label")
   other_attributes <- attributes[!names(attributes) %in% required_keys]
-  
+
   for (key in names(other_attributes)) {
     result[[key]] <- other_attributes[[key]]
   }
-  
+
   return(result)
+}
+
+#' Check Hierarchical Match Between TACs and Morph Attributes
+#'
+#' @description Determines if a morph file matches a tacs file using hierarchical matching rules
+#'
+#' @param tacs_attrs Tibble with tacs BIDS attributes from extract_bids_attributes_from_filename()
+#' @param morph_attrs Tibble with morph BIDS attributes from extract_bids_attributes_from_filename()
+#' @return Logical TRUE if files match, FALSE otherwise
+#' @details
+#' Matching rules:
+#' - EXACT: sub, seg/label must match exactly
+#' - HIERARCHICAL: morph without ses/run matches all ses/run values for that subject
+#' - IGNORED: pvc, desc, rec, task not used for matching
+#' @export
+is_hierarchical_match <- function(tacs_attrs, morph_attrs) {
+
+  # 1. EXACT MATCH: sub must match exactly
+  if (is.na(tacs_attrs$sub) || is.na(morph_attrs$sub)) return(FALSE)
+  if (tacs_attrs$sub != morph_attrs$sub) return(FALSE)
+
+  # 2. EXACT MATCH: seg OR label must match exactly
+  # Check seg first
+  if (!is.na(tacs_attrs$seg)) {
+    # TACs has seg - morph must also have matching seg
+    if (is.na(morph_attrs$seg)) return(FALSE)
+    if (tacs_attrs$seg != morph_attrs$seg) return(FALSE)
+  } else if (!is.na(tacs_attrs$label)) {
+    # TACs has label - morph must also have matching label
+    if (is.na(morph_attrs$label)) return(FALSE)
+    if (tacs_attrs$label != morph_attrs$label) return(FALSE)
+  } else {
+    # TACs has neither seg nor label - cannot match
+    return(FALSE)
+  }
+
+  # 3. HIERARCHICAL MATCH: ses
+  if (!is.na(morph_attrs$ses)) {
+    # Morph has ses - must match exactly
+    if (is.na(tacs_attrs$ses)) return(FALSE)
+    if (tacs_attrs$ses != morph_attrs$ses) return(FALSE)
+  }
+  # If morph has no ses, it matches all ses values (no check needed)
+
+  # 4. HIERARCHICAL MATCH: run
+  if (!is.na(morph_attrs$run)) {
+    # Morph has run - must match exactly
+    if (is.na(tacs_attrs$run)) return(FALSE)
+    if (tacs_attrs$run != morph_attrs$run) return(FALSE)
+  }
+  # If morph has no run, it matches all run values (no check needed)
+
+  # 5. IGNORED: pvc, desc, rec, task - not checked at all
+
+  return(TRUE)
+}
+
+#' Create TACs-Morph File Mapping for Pipeline Folder
+#'
+#' @description Efficiently maps all tacs files to their matching morph files using dplyr joins
+#'
+#' @param pipeline_folder Full path to pipeline folder (e.g., derivatives/petprep)
+#' @return Tibble with columns: tacs_path, morph_path (morph_path is NA if no match)
+#' @details
+#' Efficient bulk matching strategy:
+#' 1. Recursively finds all tacs and morph files once
+#' 2. Extracts attributes from all files (keeping only those with seg/label)
+#' 3. Uses dplyr join with hierarchical ses/run matching
+#' 4. Returns complete mapping
+#' @export
+create_tacs_morph_mapping <- function(pipeline_folder) {
+
+  # Find all tacs files (excluding combined files)
+  tacs_files <- list.files(pipeline_folder, pattern = "_tacs\\.tsv$",
+                           full.names = TRUE, recursive = TRUE)
+  tacs_files <- tacs_files[!grepl("desc-combinedregions_tacs\\.tsv$", tacs_files)]
+
+  # Find all morph files
+  morph_files <- list.files(pipeline_folder, pattern = "_morph\\.tsv$",
+                            full.names = TRUE, recursive = TRUE)
+
+  # Extract attributes from all tacs files
+  tacs_data <- purrr::map_dfr(tacs_files, function(f) {
+    attrs <- extract_bids_attributes_from_filename(f)
+    attrs$tacs_path <- f
+    attrs
+  })
+
+  # Filter tacs files to only those with seg or label
+  tacs_data <- tacs_data %>%
+    dplyr::filter(!is.na(seg) | !is.na(label))
+
+  # If no valid tacs files, return empty
+  if (nrow(tacs_data) == 0) {
+    return(tibble::tibble(tacs_path = character(0), morph_path = character(0)))
+  }
+
+  # Extract attributes from all morph files
+  morph_data <- purrr::map_dfr(morph_files, function(f) {
+    attrs <- extract_bids_attributes_from_filename(f)
+    attrs$morph_path <- f
+    attrs
+  })
+
+  # Filter morph files to only those with seg or label
+  morph_data <- morph_data %>%
+    dplyr::filter(!is.na(seg) | !is.na(label))
+
+  # If no valid morph files, return tacs with NA morph paths
+  if (nrow(morph_data) == 0) {
+    return(tibble::tibble(
+      tacs_path = tacs_data$tacs_path,
+      morph_path = NA_character_
+    ))
+  }
+
+  # Perform hierarchical matching using joins
+  # Match on: sub (exact), seg/label (exact), ses (hierarchical), run (hierarchical)
+
+  # Create matching keys
+  tacs_data <- tacs_data %>%
+    dplyr::mutate(
+      match_key = dplyr::coalesce(seg, label),  # Use seg if present, else label
+      match_type = dplyr::if_else(!is.na(seg), "seg", "label")
+    )
+
+  morph_data <- morph_data %>%
+    dplyr::mutate(
+      match_key = dplyr::coalesce(seg, label),
+      match_type = dplyr::if_else(!is.na(seg), "seg", "label")
+    )
+
+  # Join on sub and match_key, then filter for hierarchical ses/run matching
+  mapping <- tacs_data %>%
+    dplyr::left_join(
+      morph_data %>% dplyr::select(sub, match_key, ses, run, morph_path),
+      by = c("sub", "match_key"),
+      relationship = "many-to-many"
+    ) %>%
+    # Filter for hierarchical matching: morph ses/run must be NA or match exactly
+    dplyr::filter(
+      is.na(ses.y) | is.na(ses.x) | ses.x == ses.y,
+      is.na(run.y) | is.na(run.x) | run.x == run.y
+    ) %>%
+    # Keep first match for each tacs file
+    dplyr::group_by(tacs_path) %>%
+    dplyr::slice(1) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(tacs_path, morph_path)
+
+  return(mapping)
+}
+
+#' Get Region Volumes from Morph File with Fallback
+#'
+#' @description Read morph file and return volume data, or NULL for volume=1 fallback
+#'
+#' @param morph_path Full path to morph file (can be NULL or NA)
+#' @return Tibble with morph data (name, volume-mm3), or NULL if file not found
+#' @details
+#' If morph file is missing, NULL, or NA:
+#' - Issues warning about BIDS spec non-conformance
+#' - Returns NULL to signal volume=1 fallback
+#' @export
+get_region_volumes_from_morph <- function(morph_path) {
+
+  # Check if morph_path is NULL or NA
+  if (is.null(morph_path) || is.na(morph_path)) {
+    warning("Derivative data does not conform to the PET Preprocessing Derivatives BIDS specification. Using volume=1 for all regions.")
+    return(NULL)
+  }
+
+  # Check if file exists
+  if (!file.exists(morph_path)) {
+    warning("Derivative data does not conform to the PET Preprocessing Derivatives BIDS specification. Using volume=1 for all regions.")
+    return(NULL)
+  }
+
+  # Read and return morph data
+  tryCatch({
+    readr::read_tsv(morph_path, show_col_types = FALSE)
+  }, error = function(e) {
+    warning(paste("Error reading morph file:", e$message, ". Using volume=1 for all regions."))
+    return(NULL)
+  })
 }
 
 #' Calculate Segmentation Mean TAC
@@ -882,37 +1009,52 @@ find_tacs_folders <- function(derivatives_folder) {
 
 #' Summarise TACs File Descriptions
 #'
-#' @description Process and summarize TACs files descriptions
+#' @description Process and summarize TACs files descriptions, filtering for files with seg or label attributes
 #'
 #' @param dir_path Character string path to directory containing *_tacs.tsv files
-#' @return Data frame with region configurations from the directory
+#' @return Data frame with region configurations from the directory (only files with seg or label)
 #' @export
 summarise_tacs_descriptions <- function(dir_path) {
-  
+
   # Get all *_tacs.tsv files in this directory (excluding combined files)
-  tacs_files <- list.files(dir_path, pattern = "*_tacs\\.tsv$", 
+  tacs_files <- list.files(dir_path, pattern = "*_tacs\\.tsv$",
                            recursive = TRUE, full.names = TRUE)
   # Exclude combined TACs files
   tacs_files <- tacs_files[!grepl("desc-combinedregions_tacs\\.tsv$", tacs_files)]
-  
+
   if (length(tacs_files) == 0) {
     return(NULL)
   }
-  
+
   parsed_files <- kinfitr::bids_parse_files(dir_path)
-  
+
   # Unnest the filedata
   unnested_tacfiledata <- parsed_files %>%
-    dplyr::select(filedata) %>% 
-    tidyr::unnest(filedata) %>% 
-    dplyr::filter(measurement=="tacs") %>% 
+    dplyr::select(filedata) %>%
+    tidyr::unnest(filedata) %>%
+    dplyr::filter(measurement=="tacs") %>%
     dplyr::select(-path_absolute, -path, -extension,
-                  -measurement) %>% 
+                  -measurement) %>%
     dplyr::distinct()
-  
+
+  # Filter for files with seg or label attributes (silently exclude others)
+  # kinfitr::bids_parse_files() should provide seg and label columns if present
+  if ("seg" %in% colnames(unnested_tacfiledata) || "label" %in% colnames(unnested_tacfiledata)) {
+    unnested_tacfiledata <- unnested_tacfiledata %>%
+      dplyr::filter(!is.na(seg) | !is.na(label))
+  } else {
+    # No seg or label columns found - return empty
+    return(tibble::tibble(description = character(0)))
+  }
+
+  # Return empty if no files match
+  if (nrow(unnested_tacfiledata) == 0) {
+    return(tibble::tibble(description = character(0)))
+  }
+
   create_bids_key_value_pairs(unnested_tacfiledata,
                               colnames(unnested_tacfiledata))
-  
+
 }
 
 create_tacs_list <- function(derivatives_folder) {
@@ -928,35 +1070,35 @@ create_tacs_list <- function(derivatives_folder) {
 }
 
 
-#' Create kinfitr Regions Configuration
-#'
-#' @description Function to scan derivatives folders for *_tacs.tsv files and 
-#' generate region configuration file
-#'
-#' @param derivatives_folder Character string path to the derivatives folder
-#' @return Data frame with region configurations
-#' @export
-create_kinfitr_regions <- function(derivatives_folder) {
-  
-  # Find folders containing TACs files
-  valid_dirs <- find_tacs_folders(derivatives_folder)
-  
-  # Process all valid directories
-  all_regions <- purrr::map_dfr(valid_dirs, summarise_tacs_files)
-  
-  # Remove any duplicate combinations
-  unique_regions <- all_regions %>%
-    dplyr::distinct(region_name, derivatives_folder, description, name)
-  
-  # Write to kinfitr_regions.tsv
-  output_file <- file.path(derivatives_folder, "kinfitr_regions.tsv")
-  readr::write_tsv(unique_regions, output_file)
-  
-  cat("Created kinfitr_regions.tsv with", nrow(unique_regions), "region configurations\n")
-  cat("Output file:", output_file, "\n")
-  
-  return(unique_regions)
-}
+#' #' Create kinfitr Regions Configuration
+#' #'
+#' #' @description Function to scan derivatives folders for *_tacs.tsv files and 
+#' #' generate region configuration file
+#' #'
+#' #' @param derivatives_folder Character string path to the derivatives folder
+#' #' @return Data frame with region configurations
+#' #' @export
+#' create_kinfitr_regions <- function(derivatives_folder) {
+#'   
+#'   # Find folders containing TACs files
+#'   valid_dirs <- find_tacs_folders(derivatives_folder)
+#'   
+#'   # Process all valid directories
+#'   all_regions <- purrr::map_dfr(valid_dirs, summarise_tacs_files)
+#'   
+#'   # Remove any duplicate combinations
+#'   unique_regions <- all_regions %>%
+#'     dplyr::distinct(region_name, derivatives_folder, description, name)
+#'   
+#'   # Write to kinfitr_regions.tsv
+#'   output_file <- file.path(derivatives_folder, "kinfitr_regions.tsv")
+#'   readr::write_tsv(unique_regions, output_file)
+#'   
+#'   cat("Created kinfitr_regions.tsv with", nrow(unique_regions), "region configurations\n")
+#'   cat("Output file:", output_file, "\n")
+#'   
+#'   return(unique_regions)
+#' }
 
 create_bids_key_value_pairs <- function(data, columns) {
   data %>%
