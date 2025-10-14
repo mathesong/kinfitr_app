@@ -590,39 +590,6 @@ model_data <- model_data %>%
 ```
 
 
-## Fits
-
-### Plots
-
-```{r, fig.height=4, fig.width=6}
-fitplots <- model_data %>% 
-  mutate(title = paste(pet, " : ", region)) %>% 
-  mutate(fitplot = pmap(list(fit_2tcm, region, title), 
-                        ~plot(..1, roiname=..2) + 
-                          labs(title = ..3,
-                               y = "Radioactivity (kBq)",
-                               x = "Time (min)"))) %>% 
-  pull(fitplot)
-
-walk(fitplots, ~print(.x))
-```
-
-### Residuals
-
-```{r, fig.height=4, fig.width=6}
-resplots <- model_data %>% 
-  mutate(title = paste(pet, " : ", region)) %>% 
-  mutate(resplot = pmap(list(fit_2tcm, title), 
-                        ~plot_residuals(..1) + 
-                          labs(title = ..2))) %>% 
-  pull(resplot)
-
-walk(resplots, ~print(.x))
-```
-
-
-
-
 ## Parameters
 
 ```{r}
@@ -724,6 +691,39 @@ ggplot(par_table_long, aes(x=Value, fill=region)) +
   geom_histogram(colour="black") +
   facet_wrap(~Parameter, scales="free", ncol=2)
 ```
+
+
+## Fits
+
+### Plots
+
+```{r, fig.height=4, fig.width=6}
+fitplots <- model_data %>% 
+  mutate(title = paste(pet, " : ", region)) %>% 
+  mutate(fitplot = pmap(list(fit_2tcm, region, title), 
+                        ~plot(..1, roiname=..2) + 
+                          labs(title = ..3,
+                               y = "Radioactivity (kBq)",
+                               x = "Time (min)"))) %>% 
+  pull(fitplot)
+
+walk(fitplots, ~print(.x))
+```
+
+### Residuals
+
+```{r, fig.height=4, fig.width=6}
+resplots <- model_data %>% 
+  mutate(title = paste(pet, " : ", region)) %>% 
+  mutate(resplot = pmap(list(fit_2tcm, title), 
+                        ~plot_residuals(..1) + 
+                          labs(title = ..2))) %>% 
+  pull(resplot)
+
+walk(resplots, ~print(.x))
+```
+
+
 
 
 # Saving

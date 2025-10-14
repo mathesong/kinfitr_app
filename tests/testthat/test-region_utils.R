@@ -326,21 +326,21 @@ test_that("find_tacs_folders identifies TACs directories correctly", {
 })
 
 test_that("summarise_tacs_descriptions extracts BIDS attributes", {
-  
+
   source(here::here("tests/testthat/fixtures/setup.R"))
-  
+
   temp_dir <- tempdir()
   bids_dir <- create_test_bids_structure(temp_dir, n_subjects = 1, n_sessions = 1)
-  
+
   tacs_dir <- file.path(bids_dir, "derivatives", "kinfitr", "sub-01", "ses-01")
-  
+
   result <- summarise_tacs_descriptions(tacs_dir)
-  
+
   expect_s3_class(result, "tbl_df")
   expect_true(nrow(result) >= 1)
-  expect_true("desc" %in% colnames(result))
-  expect_true("freesurfer" %in% result$desc)
-  
+  expect_true("description" %in% colnames(result))
+  expect_true("freesurfer" %in% result$description)
+
   # Cleanup
   cleanup_test_dirs(bids_dir)
 })

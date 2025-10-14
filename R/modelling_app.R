@@ -1827,24 +1827,31 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
         cat("Looking for combined regions file at:", combined_regions_file, "\n")
         
         if (file.exists(combined_regions_file)) {
-          cat("Combined regions file found, reading desc values...\n")
+          cat("Combined regions file found, reading segmentation values...\n")
           combined_regions <- readr::read_tsv(combined_regions_file, show_col_types = FALSE)
-          
-          if (nrow(combined_regions) > 0 && "desc" %in% colnames(combined_regions)) {
-            # Get unique desc values for segmentation options
-            unique_desc <- sort(unique(combined_regions$desc))
-            unique_desc <- unique_desc[!is.na(unique_desc)]
-            
-            cat("Found", length(unique_desc), "unique desc values:", paste(unique_desc, collapse = ", "), "\n")
-            
-            if (length(unique_desc) > 0) {
+
+          if (nrow(combined_regions) > 0 && "segmentation" %in% colnames(combined_regions)) {
+            # Get unique segmentation values for segmentation options
+            unique_segmentations <- sort(unique(combined_regions$segmentation))
+            unique_segmentations <- unique_segmentations[!is.na(unique_segmentations)]
+
+            cat("Found", length(unique_segmentations), "unique segmentation values:", paste(unique_segmentations, collapse = ", "), "\n")
+
+            if (length(unique_segmentations) > 0) {
               # Create choices for segmentation selection
-              choices <- setNames(unique_desc, unique_desc)
-              
+              choices <- setNames(unique_segmentations, unique_segmentations)
+
+              # Prioritize seg- segmentations over label- for default selection
+              default_selection <- if (any(stringr::str_detect(unique_segmentations, "seg-"))) {
+                unique_segmentations[stringr::str_detect(unique_segmentations, "seg-")][1]
+              } else {
+                unique_segmentations[1]
+              }
+
               updateSelectInput(session, "weights_external_tacs",
                                choices = choices,
-                               selected = unique_desc[1])
-              
+                               selected = default_selection)
+
               cat("Successfully updated external segmentation dropdown\n")
             } else {
               updateSelectInput(session, "weights_external_tacs",
@@ -1853,7 +1860,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
             }
           } else {
             updateSelectInput(session, "weights_external_tacs",
-                             choices = c("No desc column found" = ""),
+                             choices = c("No segmentation column found" = ""),
                              selected = "")
           }
         } else {

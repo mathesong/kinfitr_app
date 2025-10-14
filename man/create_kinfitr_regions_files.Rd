@@ -15,5 +15,5 @@ create_kinfitr_regions_files(kinfitr_regions_file, derivatives_folder)
 Creates kinfitr_regions_files.tsv and returns the mapping data
 }
 \description{
-Creates file mapping TSV linking regions to their TACs/morph files
+Creates file mapping TSV linking regions to their TACs/morph files using seg/label-based matching
 }

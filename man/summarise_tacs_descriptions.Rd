@@ -10,8 +10,8 @@ summarise_tacs_descriptions(dir_path)
 \item{dir_path}{Character string path to directory containing *_tacs.tsv files}
 }
 \value{
-Data frame with region configurations from the directory
+Data frame with region configurations from the directory (only files with seg or label)
 }
 \description{
-Process and summarize TACs files descriptions
+Process and summarize TACs files descriptions, filtering for files with seg or label attributes
 }

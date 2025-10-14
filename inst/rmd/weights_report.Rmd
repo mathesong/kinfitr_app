@@ -13,9 +13,9 @@ params:
 
 <!-- For temporary debugging, this defines temporary parameters for the parameterised report -->
 
-<!-- ```{r} -->
-<!-- analysis_folder <- "/home/granville/Repositories/OpenNeuro/ds004869/derivatives/kinfitr/Primary_Analysis/" -->
-<!-- ``` -->
+<!--  ```{r} -->
+<!--  analysis_folder <- "/home/granville/Repositories/OpenNeuro/KaSP_UCBJ_BIDS_mini/derivatives/kinfitr/Primary_Analysis/" -->
+<!--  ``` -->
 
 
 ```{r setup, include=FALSE}
@@ -70,6 +70,13 @@ if (!is.null(config$Weights)) {
     Parameter = names(weights),
     Value = map_chr(weights, ~ if(.x == "" || is.null(.x)) "Not specified" else as.character(.x))
   )
+  
+  if(config$Weights$radioisotope %in% c("C11", "O15", "F18") & 
+     config$Weights$halflife == "") {
+    weights_df <- weights_df %>% 
+      filter(Parameter != "halflife")
+  }
+  
   kable(weights_df)
 } else {
   cat("No weights parameters found in configuration file.")
@@ -191,7 +198,7 @@ weights_tacdata <- left_join(weights_tacdata, mean_tacdata) %>%
 
 ```{r external-tacdata-creation, eval=create_tacmean_external, echo=create_tacmean_external}
 # Load segmentation mean TACs from combined regions file
-selected_desc <- config$Weights$external_tacs
+selected_segmentation <- config$Weights$external_tacs
 
 # Find TACs files for data structure
 tacs_files <- list.files(analysis_folder,
@@ -207,11 +214,11 @@ weights_tacdata <- tibble(
   group_by(filename) %>%
   mutate(tacs = map(filename, ~read_tsv(file.path(analysis_folder, .x), show_col_types = FALSE))) %>%
   unnest(tacs) %>%
-  group_by(pet) %>% 
-  filter(region == region[1]) %>% 
-  ungroup() %>% 
-  select(-filename, -basename, -measurement, -desc, -region, 
-         -volume_mm3, -InjectedRadioactivity, -bodyweight) %>% 
+  group_by(pet) %>%
+  filter(region == region[1]) %>%
+  ungroup() %>%
+  select(-filename, -basename, -measurement, -desc, -region,
+         -volume_mm3, -InjectedRadioactivity, -bodyweight) %>%
   select(-TAC)  # to be replaced by the meanTAC
 
 
@@ -221,29 +228,29 @@ combined_regions_file <- file.path(kinfitr_dir, "desc-combinedregions_tacs.tsv")
 
 if (file.exists(combined_regions_file)) {
   combined_regions_data <- read_tsv(combined_regions_file, show_col_types = FALSE)
-  
-  # Filter for the selected segmentation (desc) and extract seg_meanTAC
-  if ("seg_meanTAC" %in% colnames(combined_regions_data) && "desc" %in% colnames(combined_regions_data)) {
+
+  # Filter for the selected segmentation and extract seg_meanTAC
+  if ("seg_meanTAC" %in% colnames(combined_regions_data) && "segmentation" %in% colnames(combined_regions_data)) {
     segmentation_data <- combined_regions_data %>%
-      filter(desc == selected_desc) %>%
+      filter(segmentation == selected_segmentation) %>%
       # Take first instance for each time point since seg_meanTAC is the same for all regions from the same segmentation
       group_by(pet, frame_start, frame_end, frame_dur, frame_mid) %>%
       slice_head(n = 1) %>%
       ungroup() %>%
       select(pet, frame_start, frame_end, frame_dur, frame_mid, TAC = seg_meanTAC)
-    
+
     if (nrow(segmentation_data) > 0) {
-      cat("Successfully loaded segmentation mean TACs for desc:", selected_desc, "\n")
+      cat("Successfully loaded segmentation mean TACs for segmentation:", selected_segmentation, "\n")
       # cat("Total measurements found:", length(unique(weights_tacdata$pet)), "\n")
     } else {
-      stop("No data found for segmentation desc: ", selected_desc)
+      stop("No data found for segmentation: ", selected_segmentation)
     }
   } else {
     if (!"seg_meanTAC" %in% colnames(combined_regions_data)) {
       stop("seg_meanTAC column not found in combined regions file. Please regenerate combined regions with updated region definition app.")
     }
-    if (!"desc" %in% colnames(combined_regions_data)) {
-      stop("desc column not found in combined regions file")
+    if (!"segmentation" %in% colnames(combined_regions_data)) {
+      stop("segmentation column not found in combined regions file")
     }
   }
 } else {

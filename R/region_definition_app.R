@@ -106,14 +106,54 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     existing_data <- readr::read_tsv(existing_write_regions_file, show_col_types = FALSE)
     file_was_empty <- nrow(existing_data) == 0
     cat("Found existing kinfitr_regions.tsv file:", existing_write_regions_file, "\n")
-    
+
     # If reading from a different location than write location, copy it over
-    if (existing_write_regions_file != write_regions_file) {
+    # Normalize both paths before comparison to avoid false mismatches from path formatting
+    normalized_existing <- normalizePath(existing_write_regions_file, mustWork = TRUE)
+    normalized_write <- normalizePath(write_regions_file, mustWork = FALSE)
+
+    if (normalized_existing != normalized_write) {
       file.copy(existing_write_regions_file, write_regions_file, overwrite = TRUE)
       cat("Copied regions file to write location:", write_regions_file, "\n")
     }
   }
-  
+
+  # Validate existing regions against available TACs files (if file not empty)
+  if (!file_was_empty) {
+    # Read the regions file from write location to get current state
+    regions_to_validate <- tryCatch({
+      readr::read_tsv(write_regions_file, show_col_types = FALSE)
+    }, error = function(e) {
+      NULL
+    })
+
+    if (!is.null(regions_to_validate) && nrow(regions_to_validate) > 0) {
+      validated_mapping <- tryCatch({
+        suppressMessages({
+          create_kinfitr_regions_files(write_regions_file, derivatives_dir)
+        })
+      }, error = function(e) {
+        NULL
+      })
+
+      if (!is.null(validated_mapping) && nrow(validated_mapping) > 0) {
+        # Check if all regions in file were successfully matched
+        existing_regions_count <- nrow(regions_to_validate)
+        validated_regions_count <- nrow(validated_mapping)
+
+        if (validated_regions_count < existing_regions_count) {
+          cat("Warning: Not all segmentations from the existing region definition were found in the derivatives folder\n")
+          cat("  Regions in file:", existing_regions_count, "\n")
+          cat("  Regions matched:", validated_regions_count, "\n")
+        } else {
+          cat("Successfully loaded existing region definitions\n")
+        }
+      } else {
+        cat("Warning: Not all segmentations from the existing region definition were found in the derivatives folder\n")
+      }
+    }
+  }
+
   # Try to create TACs list, with error handling
   tacs_list <- tryCatch({
     create_tacs_list(derivatives_dir)
@@ -408,7 +448,12 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
         result_list <- append(result_list, list(
           hr(),
           div(style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px;",
-              h5(paste0("Selected Regions (", length(selected_region_names), " total):")),
+              div(style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;",
+                  h5(paste0("Selected Regions (", length(selected_region_names), " total):")),
+                  actionButton("reset_selected", "Reset selected regions",
+                              class = "btn-warning btn-sm",
+                              style = "margin-left: 10px;")
+              ),
               do.call(tagList, selected_checkboxes))
         ))
       }
@@ -464,120 +509,72 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
         # Parse the key-value pairs back to get file details
         parsed_details <- interpret_bids_key_value_pairs(selected_info$description)
 
-        # Create tibble from tacs_list and join to get actual file paths
-        selected_tibble <- tibble::tibble(tacs_filedescription = input$selected_tacs)
-        joined_data <- dplyr::inner_join(selected_tibble, tacs_list, by = "tacs_filedescription")
+        # Get pre-computed file paths directly from tacs_list (no manual searching needed!)
+        tacs_file <- selected_info$tacs_path[1]
+        morph_file <- selected_info$morph_path[1]
 
-        if (nrow(joined_data) > 0) {
-          # Get the pipeline folder path
-          pipeline_folder <- joined_data$path[1]
+        # Extract attributes from tacs file for console output
+        tacs_attrs <- extract_bids_attributes_from_filename(tacs_file)
 
-          # Extract the description from the selected TACs option
-          tacs_parts <- stringr::str_split(input$selected_tacs, ": ", n = 2)[[1]]
-          description_part <- if(length(tacs_parts) > 1) tacs_parts[2] else ""
+        # Console output - show file and seg/label information
+        cat("Selected TACs file:", tacs_file, "\n")
+        if (!is.na(morph_file)) {
+          cat("Matched morph file:", morph_file, "\n")
+        } else {
+          cat("No matching morph file - using volume=1 fallback\n")
+        }
+        if (!is.na(tacs_attrs$seg)) {
+          cat("Segmentation key: seg =", tacs_attrs$seg, "\n")
+        } else if (!is.na(tacs_attrs$label)) {
+          cat("Segmentation key: label =", tacs_attrs$label, "\n")
+        }
 
-          # Find _tacs.tsv files in this directory that match the description (excluding combined files)
-          tacs_files <- list.files(pipeline_folder, pattern = "*_tacs\\.tsv$",
-                                  recursive = TRUE, full.names = TRUE)
-          # Exclude combined TACs files
-          tacs_files <- tacs_files[!grepl("desc-combinedregions_tacs\\.tsv$", tacs_files)]
+        # Load morph data with volume=1 fallback
+        morph_df <- get_region_volumes_from_morph(morph_file)
 
-          # Filter to find the file that matches the selected description
-          matching_tacs_file <- NULL
-          for (tacs_file in tacs_files) {
-            if (stringr::str_detect(tacs_file, description_part)) {
-              matching_tacs_file <- tacs_file
-              break
-            }
-          }
+        if (!is.null(morph_df)) {
+          # Filter for non-zero volume-mm3 values
+          if ("volume-mm3" %in% colnames(morph_df) && "name" %in% colnames(morph_df)) {
+            filtered_morph <- morph_df %>%
+              dplyr::filter(`volume-mm3` != 0) %>%
+              dplyr::select(name) %>%
+              dplyr::arrange(name)
 
-          if (!is.null(matching_tacs_file)) {
-            # Extract attributes from tacs file
-            tacs_attrs <- extract_bids_attributes_from_filename(matching_tacs_file)
-
-            # Console output - show seg/label information
-            cat("Selected TACs description:", description_part, "\n")
-            cat("Matching TACs file:", matching_tacs_file, "\n")
-            if (!is.na(tacs_attrs$seg)) {
-              cat("Segmentation key: seg =", tacs_attrs$seg, "\n")
-            } else if (!is.na(tacs_attrs$label)) {
-              cat("Segmentation key: label =", tacs_attrs$label, "\n")
-            }
-
-            # Create mapping for this pipeline folder
-            cat("Creating TACs-morph mapping for pipeline folder...\n")
-            mapping <- create_tacs_morph_mapping(pipeline_folder)
-
-            # Look up morph file for this tacs file
-            tacs_mapping <- mapping %>%
-              dplyr::filter(tacs_path == matching_tacs_file)
-
-            if (nrow(tacs_mapping) > 0) {
-              morph_file <- tacs_mapping$morph_path[1]
-
-              if (!is.na(morph_file)) {
-                cat("Found matching morph file:", morph_file, "\n")
-              } else {
-                cat("No matching morph file found - using volume=1 fallback\n")
-              }
-
-              # Load morph data with volume=1 fallback
-              morph_df <- get_region_volumes_from_morph(morph_file)
-
-              if (!is.null(morph_df)) {
-                # Filter for non-zero volume-mm3 values
-                if ("volume-mm3" %in% colnames(morph_df) && "name" %in% colnames(morph_df)) {
-                  filtered_morph <- morph_df %>%
-                    dplyr::filter(`volume-mm3` != 0) %>%
-                    dplyr::select(name) %>%
-                    dplyr::arrange(name)
-
-                  morph_data(filtered_morph)
-                  filtered_morph_data(filtered_morph)  # Initialize filtered data with all data
-                  cat("Loaded", nrow(filtered_morph), "regions with non-zero volume\n")
-                } else {
-                  cat("Warning: Expected columns 'name' and 'volume-mm3' not found in morph file\n")
-                  morph_data(NULL)
-                  filtered_morph_data(NULL)
-                }
-              } else {
-                # NULL morph_df means volume=1 fallback
-                # Read tacs file to get available region names for UI display
-                cat("Using volume=1 for all regions (will be applied during region combination)\n")
-                tryCatch({
-                  tacs_df <- readr::read_tsv(matching_tacs_file, show_col_types = FALSE, n_max = 1)
-                  # Extract region names (exclude time columns)
-                  time_cols <- c("frame_start", "frame_end", "frame_dur", "frame_mid")
-                  region_cols <- setdiff(colnames(tacs_df), time_cols)
-
-                  if (length(region_cols) > 0) {
-                    # Create simple tibble with just region names (no volume-mm3 column)
-                    regions_for_display <- tibble::tibble(name = region_cols) %>%
-                      dplyr::arrange(name)
-
-                    morph_data(regions_for_display)
-                    filtered_morph_data(regions_for_display)
-                    cat("Loaded", nrow(regions_for_display), "regions from TACs file (volume=1 fallback)\n")
-                  } else {
-                    morph_data(NULL)
-                    filtered_morph_data(NULL)
-                  }
-                }, error = function(e) {
-                  cat("Error reading TACs file for region names:", e$message, "\n")
-                  morph_data(NULL)
-                  filtered_morph_data(NULL)
-                })
-              }
-            } else {
-              cat("No matching TACs file found in mapping for:", description_part, "\n")
-              morph_data(NULL)
-              filtered_morph_data(NULL)
-            }
+            morph_data(filtered_morph)
+            filtered_morph_data(filtered_morph)  # Initialize filtered data with all data
+            cat("Loaded", nrow(filtered_morph), "regions with non-zero volume\n")
           } else {
-            cat("No matching TACs file found for description:", description_part, "\n")
+            cat("Warning: Expected columns 'name' and 'volume-mm3' not found in morph file\n")
             morph_data(NULL)
             filtered_morph_data(NULL)
           }
+        } else {
+          # NULL morph_df means volume=1 fallback
+          # Read tacs file to get available region names for UI display
+          cat("Using volume=1 for all regions (will be applied during region combination)\n")
+          tryCatch({
+            tacs_df <- readr::read_tsv(tacs_file, show_col_types = FALSE, n_max = 1)
+            # Extract region names (exclude time columns)
+            time_cols <- c("frame_start", "frame_end", "frame_dur", "frame_mid")
+            region_cols <- setdiff(colnames(tacs_df), time_cols)
+
+            if (length(region_cols) > 0) {
+              # Create simple tibble with just region names (no volume-mm3 column)
+              regions_for_display <- tibble::tibble(name = region_cols) %>%
+                dplyr::arrange(name)
+
+              morph_data(regions_for_display)
+              filtered_morph_data(regions_for_display)
+              cat("Loaded", nrow(regions_for_display), "regions from TACs file (volume=1 fallback)\n")
+            } else {
+              morph_data(NULL)
+              filtered_morph_data(NULL)
+            }
+          }, error = function(e) {
+            cat("Error reading TACs file for region names:", e$message, "\n")
+            morph_data(NULL)
+            filtered_morph_data(NULL)
+          })
         }
 
         loaded_tacs_data(list(
@@ -608,14 +605,33 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     # Display TACs file information in sidebar
     output$tacs_info_sidebar <- renderText({
       data <- loaded_tacs_data()
+      morph_df <- morph_data()
+
       if (is.null(data)) return("No file loaded")
-      
+
+      # Extract useful information from first row only
+      pipeline <- data$info$foldername[1] %||% "Unknown"
+      segmentation <- data$info$description[1] %||% "Unknown"
+
+      # Count available regions
+      n_regions <- if (!is.null(morph_df) && nrow(morph_df) > 0) {
+        nrow(morph_df)
+      } else {
+        0
+      }
+
+      # Check if using volume=1 fallback (first row only)
+      has_morph <- !is.na(data$info$morph_path[1])
+      volume_info <- if (has_morph) "Matched morph file" else "Using volume=1 fallback"
+
       info_text <- paste(
-        "File:", data$info$tacs_filedescription,
-        "\nFolder:", data$info$foldername,
+        "Pipeline:", pipeline,
+        "\nSegmentation:", segmentation,
+        "\nAvailable regions:", n_regions,
+        "\n", volume_info,
         sep = ""
       )
-      
+
       return(info_text)
     })
     
@@ -886,12 +902,12 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
     observeEvent(input$select_all_visible, {
       filtered_morph_df <- filtered_morph_data()
       full_morph_df <- morph_data()
-      
-      if (is.null(filtered_morph_df) || nrow(filtered_morph_df) == 0 || 
+
+      if (is.null(filtered_morph_df) || nrow(filtered_morph_df) == 0 ||
           is.null(full_morph_df) || nrow(full_morph_df) == 0) {
         return()
       }
-      
+
       # Get currently selected regions
       selected_region_names <- c()
       for (i in 1:nrow(full_morph_df)) {
@@ -900,11 +916,11 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
           selected_region_names <- c(selected_region_names, full_morph_df$name[i])
         }
       }
-      
+
       # Get unselected filtered regions
       filtered_names <- filtered_morph_df$name
       unselected_filtered_names <- setdiff(filtered_names, selected_region_names)
-      
+
       # Update only the UNSELECTED filtered region checkboxes
       for (region_name in unselected_filtered_names) {
         orig_idx <- which(full_morph_df$name == region_name)
@@ -912,7 +928,24 @@ region_definition_app <- function(bids_dir = NULL, derivatives_dir = NULL, kinfi
         updateCheckboxInput(session, checkbox_id, value = input$select_all_visible)
       }
     })
-    
+
+    # Handle reset selected regions button
+    observeEvent(input$reset_selected, {
+      full_morph_df <- morph_data()
+
+      if (is.null(full_morph_df) || nrow(full_morph_df) == 0) {
+        return()
+      }
+
+      # Deselect all checkboxes
+      for (i in 1:nrow(full_morph_df)) {
+        checkbox_id <- paste0("region_", i)
+        updateCheckboxInput(session, checkbox_id, value = FALSE)
+      }
+
+      showNotification("All regions deselected", type = "message", duration = 2)
+    })
+
     # Update select all checkbox based on individual selections
     observe({
       filtered_morph_df <- filtered_morph_data()

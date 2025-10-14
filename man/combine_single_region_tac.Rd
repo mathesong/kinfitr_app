@@ -14,7 +14,7 @@ combine_single_region_tac(
 \arguments{
 \item{tacs_data}{TACs tibble in wide format (regions as columns)}
 
-\item{morph_data}{Morph tibble with volume data}
+\item{morph_data}{Morph tibble with volume data (can be NULL for volume=1 fallback)}
 
 \item{constituent_regions}{Vector of region names to combine}
 

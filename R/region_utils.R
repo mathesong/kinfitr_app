@@ -649,6 +649,50 @@ get_region_volumes_from_morph <- function(morph_path) {
   })
 }
 
+#' Determine Varying BIDS Attributes
+#'
+#' @description Identifies which BIDS attributes vary across the dataset
+#'
+#' @param all_data Tibble containing BIDS attributes
+#' @param candidate_attrs Vector of candidate attribute names to check
+#' @return Character vector of attribute names that vary in the dataset
+#' @export
+determine_varying_attributes <- function(all_data, candidate_attrs = c("sub", "ses", "trc", "rec", "task", "run")) {
+  varying <- purrr::map_lgl(candidate_attrs, function(attr) {
+    if (!attr %in% colnames(all_data)) return(FALSE)
+    unique_vals <- unique(all_data[[attr]])
+    unique_vals <- unique_vals[!is.na(unique_vals)]
+    length(unique_vals) > 1
+  })
+  candidate_attrs[varying]
+}
+
+#' Reconstruct Pet Column from Varying Attributes Only
+#'
+#' @description Builds pet identifier using only attributes that vary in the dataset
+#'
+#' @param data Tibble with BIDS attributes
+#' @param varying_attrs Character vector of attribute names that vary
+#' @return Tibble with reconstructed pet column
+#' @export
+reconstruct_pet_column <- function(data, varying_attrs) {
+  if (length(varying_attrs) == 0) {
+    # No varying attributes - use a default
+    data %>% dplyr::mutate(pet = "pet-01")
+  } else {
+    data %>%
+      dplyr::mutate(
+        pet = purrr::pmap_chr(dplyr::select(., dplyr::all_of(varying_attrs)), function(...) {
+          attrs <- list(...)
+          names(attrs) <- varying_attrs
+          attrs <- attrs[!is.na(attrs)]
+          pairs <- paste0(names(attrs), "-", attrs)
+          paste(pairs, collapse = "_")
+        })
+      )
+  }
+}
+
 #' Calculate Segmentation Mean TAC
 #'
 #' @description Calculate volume-weighted mean TAC across all regions in the segmentation
@@ -659,7 +703,7 @@ get_region_volumes_from_morph <- function(morph_path) {
 #' @param regions_for_files Filtered regions config for these specific files
 #' @return Tibble with segmentation mean TAC for each time frame
 #' @export
-calculate_segmentation_mean_tac <- function(derivatives_folder, tacs_relative_path, 
+calculate_segmentation_mean_tac <- function(derivatives_folder, tacs_relative_path,
                                           morph_relative_path, regions_for_files) {
   
   # Construct full file paths
@@ -808,9 +852,12 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
     tacs_file <- file_groups$tacs_filename[i]
     morph_file <- file_groups$morph_filename[i]
     regions_data <- file_groups$regions_data[[i]]
-    
+
     cat("Processing:", tacs_file, "\n")
-    
+
+    # Create segmentation value from folder and description (as shown in shiny app dropdown)
+    segmentation_value <- paste0(regions_data$folder[1], ": ", regions_data$description[1])
+
     # Combine regions for this file pair
     combined_results <- tryCatch({
       combine_regions_from_files(derivatives_folder, tacs_file, morph_file, regions_data)
@@ -818,11 +865,11 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
       warning(paste("Error processing", tacs_file, ":", e$message))
       return(tibble::tibble())
     })
-    
+
     if (nrow(combined_results) == 0) {
       return(tibble::tibble())
     }
-    
+
     # Calculate segmentation mean TAC (volume-weighted mean of all regions in the segmentation)
     segmentation_mean_tac <- tryCatch({
       calculate_segmentation_mean_tac(derivatives_folder, tacs_file, morph_file, regions_data)
@@ -830,7 +877,7 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
       warning(paste("Error calculating segmentation mean TAC for", tacs_file, ":", e$message))
       return(tibble::tibble())
     })
-    
+
     # Extract BIDS attributes from filename
     bids_attributes <- extract_bids_attributes_from_filename(tacs_file)
     
@@ -858,7 +905,7 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
         rec = as.character(bids_attributes$rec),
         task = as.character(bids_attributes$task),
         run = as.character(bids_attributes$run),
-        desc = as.character(bids_attributes$desc),
+        segmentation = segmentation_value,
         pet = as.character(bids_attributes$pet),
         InjectedRadioactivity = as.numeric(pet_metadata$InjectedRadioactivity),
         bodyweight = NA_real_  # Always include bodyweight column, initially NA
@@ -866,19 +913,19 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
     
     # Add segmentation mean TAC to the combined results
     if (nrow(segmentation_mean_tac) > 0) {
-      # Add BIDS attributes to segmentation mean TAC data
+      # Add segmentation identifier to segmentation mean TAC data
       segmentation_mean_tac_with_bids <- segmentation_mean_tac %>%
         dplyr::mutate(
-          desc = as.character(bids_attributes$desc),
+          segmentation = segmentation_value,
           pet = as.character(bids_attributes$pet)
         )
-      
+
       # Join segmentation mean TAC with combined results
       combined_results_with_bids <- combined_results_with_bids %>%
         dplyr::left_join(
-          segmentation_mean_tac_with_bids %>% 
-            dplyr::select(frame_start, frame_end, desc, pet, seg_meanTAC),
-          by = c("frame_start", "frame_end", "desc", "pet")
+          segmentation_mean_tac_with_bids %>%
+            dplyr::select(frame_start, frame_end, segmentation, pet, seg_meanTAC),
+          by = c("frame_start", "frame_end", "segmentation", "pet")
         )
     } else {
       # Add seg_meanTAC column with NA values if calculation failed
@@ -909,18 +956,18 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
     } else {
       character(0)
     }
-    
-    # Column order: sub, ses, trc, rec, task, run, desc, pet, InjectedRadioactivity, bodyweight, [participant_columns], region, volume_mm3, frame_*, seg_meanTAC, TAC
-    base_columns <- c("sub", "ses", "trc", "rec", "task", "run", "desc", "pet", "InjectedRadioactivity", "bodyweight")
+
+    # Column order: sub, ses, trc, rec, task, run, segmentation, pet, InjectedRadioactivity, bodyweight, [participant_columns], region, volume_mm3, frame_*, seg_meanTAC, TAC
+    base_columns <- c("sub", "ses", "trc", "rec", "task", "run", "segmentation", "pet", "InjectedRadioactivity", "bodyweight")
     frame_columns <- c("frame_start", "frame_end", "frame_dur", "frame_mid")
     end_columns <- c("region", "volume_mm3", frame_columns, "seg_meanTAC", "TAC")
-    
+
     column_order <- c(base_columns, participant_columns, end_columns)
-    
+
     combined_results_with_bids <- combined_results_with_bids %>%
       dplyr::rename(region = name, volume_mm3 = `volume-mm3`) %>%
       dplyr::select(dplyr::all_of(column_order[column_order %in% colnames(.)]))  # Only select columns that exist
-    
+
     return(combined_results_with_bids)
   })
   
@@ -928,7 +975,19 @@ create_kinfitr_combined_tacs <- function(kinfitr_regions_files_path, derivatives
     warning("No regions were successfully combined across all files")
     return(tibble::tibble())
   }
-  
+
+  # Determine which BIDS attributes vary across the dataset
+  cat("Determining varying BIDS attributes for pet column reconstruction...\n")
+  varying_attrs <- determine_varying_attributes(all_combined_data)
+  if (length(varying_attrs) > 0) {
+    cat("Varying attributes:", paste(varying_attrs, collapse = ", "), "\n")
+  } else {
+    cat("No varying attributes found, using default pet identifier\n")
+  }
+
+  # Reconstruct pet column using only varying attributes
+  all_combined_data <- reconstruct_pet_column(all_combined_data, varying_attrs)
+
   # Convert TAC data from original units to kBq for standardization
   cat("Converting TAC data from", original_tac_units, "to kBq\n")
   all_combined_data <- all_combined_data %>%
@@ -1058,61 +1117,67 @@ summarise_tacs_descriptions <- function(dir_path) {
 }
 
 create_tacs_list <- function(derivatives_folder) {
-  
+
+  # Find TACs folders and create descriptions
   tacs_folders <- tibble::tibble(
-    path = find_tacs_folders(derivatives_folder)) %>% 
-    dplyr::mutate(foldername = basename(path)) %>% 
-    dplyr::mutate(descriptions = purrr::map(path, summarise_tacs_descriptions)) %>% 
-    tidyr::unnest(descriptions) %>% 
+    path = find_tacs_folders(derivatives_folder)) %>%
+    dplyr::mutate(foldername = basename(path)) %>%
+    dplyr::mutate(
+      descriptions = purrr::map(path, summarise_tacs_descriptions),
+      # Pre-compute TACs-morph mappings using BIDS matching rules
+      mappings = purrr::map(path, create_tacs_morph_mapping)
+    ) %>%
+    tidyr::unnest(descriptions)
+
+  # Expand mappings and join with descriptions
+  tacs_with_mappings <- tacs_folders %>%
+    # Unnest the mappings to get tacs_path and morph_path
+    tidyr::unnest(mappings) %>%
+    # Extract BIDS attributes from tacs_path to match with description
+    dplyr::mutate(
+      tacs_attrs = purrr::map(tacs_path, extract_bids_attributes_from_filename)
+    ) %>%
+    tidyr::unnest(tacs_attrs) %>%
+    # Create description from attributes (excluding identifiers and desc for matching)
+    dplyr::mutate(
+      desc_from_path = create_bids_key_value_pairs(
+        dplyr::cur_data(),
+        setdiff(colnames(dplyr::cur_data()), c("path", "foldername", "description", "mappings", "tacs_path", "morph_path", "tacs_attrs", "sub", "ses", "trc", "rec", "task", "run", "pet", "desc_from_path"))
+      )$description
+    ) %>%
+    # Join with original descriptions
+    dplyr::filter(desc_from_path == description) %>%
+    dplyr::select(path, foldername, description, tacs_path, morph_path) %>%
     dplyr::mutate(tacs_filedescription = paste0(foldername, ": ", description))
-  
-  return(tacs_folders)
+
+  # Sort alphabetically by display description for organized dropdown
+  tacs_with_mappings <- tacs_with_mappings %>%
+    dplyr::arrange(tacs_filedescription)
+
+  return(tacs_with_mappings)
 }
 
 
-#' #' Create kinfitr Regions Configuration
-#' #'
-#' #' @description Function to scan derivatives folders for *_tacs.tsv files and 
-#' #' generate region configuration file
-#' #'
-#' #' @param derivatives_folder Character string path to the derivatives folder
-#' #' @return Data frame with region configurations
-#' #' @export
-#' create_kinfitr_regions <- function(derivatives_folder) {
-#'   
-#'   # Find folders containing TACs files
-#'   valid_dirs <- find_tacs_folders(derivatives_folder)
-#'   
-#'   # Process all valid directories
-#'   all_regions <- purrr::map_dfr(valid_dirs, summarise_tacs_files)
-#'   
-#'   # Remove any duplicate combinations
-#'   unique_regions <- all_regions %>%
-#'     dplyr::distinct(region_name, derivatives_folder, description, name)
-#'   
-#'   # Write to kinfitr_regions.tsv
-#'   output_file <- file.path(derivatives_folder, "kinfitr_regions.tsv")
-#'   readr::write_tsv(unique_regions, output_file)
-#'   
-#'   cat("Created kinfitr_regions.tsv with", nrow(unique_regions), "region configurations\n")
-#'   cat("Output file:", output_file, "\n")
-#'   
-#'   return(unique_regions)
-#' }
-
 create_bids_key_value_pairs <- function(data, columns) {
+  # Prioritize seg/label first, then alphabetically sort the rest
+  priority_cols <- c("seg", "label")
+  priority_present <- intersect(priority_cols, columns)
+  other_cols <- setdiff(columns, priority_cols)
+  other_cols <- sort(other_cols)  # Alphabetically sort remaining columns
+  ordered_columns <- c(priority_present, other_cols)
+
   data %>%
     dplyr::mutate(
       key_value_pairs = apply(
-        data[columns], 1,
+        data[ordered_columns], 1,
         function(row) {
           # Create key-value pairs only for non-NA values
-          pairs <- paste(columns, row, sep = "-")
+          pairs <- paste(ordered_columns, row, sep = "-")
           non_na_pairs <- pairs[!is.na(row)]
           paste(non_na_pairs, collapse = "_")
         }
       )
-    ) %>% 
+    ) %>%
     dplyr::select(description=key_value_pairs)
 }
 
@@ -1405,7 +1470,7 @@ create_combined_tacs_json_description <- function(participants_metadata, injecte
     "rec" = list("Description" = "Reconstruction identifier"),
     "task" = list("Description" = "Task identifier"),
     "run" = list("Description" = "Run identifier"),
-    "desc" = list("Description" = "Description identifier"),
+    "segmentation" = list("Description" = "Segmentation identifier from preprocessing pipeline"),
     "pet" = list("Description" = "PET measurement identifier"),
     "bodyweight" = list("Description" = "Body weight of participant for SUV calculation", "Units" = "kg"),
     "region" = list("Description" = "Brain region name (combined from constituent regions)"),
@@ -1414,7 +1479,7 @@ create_combined_tacs_json_description <- function(participants_metadata, injecte
     "frame_end" = list("Description" = "Frame end time", "Units" = "seconds"),
     "frame_dur" = list("Description" = "Frame duration", "Units" = "seconds"),
     "frame_mid" = list("Description" = "Frame midpoint time", "Units" = "seconds"),
-    "seg_meanTAC" = list("Description" = "Volume-weighted mean TAC across all regions within the segmentation file (desc)", "Units" = paste0(original_tac_units, "/mL")),
+    "seg_meanTAC" = list("Description" = "Volume-weighted mean TAC across all regions within the segmentation", "Units" = paste0(original_tac_units, "/mL")),
     "TAC" = list("Description" = "Time Activity Curve value (volume-weighted average)", "Units" = paste0(original_tac_units, "/mL"))
   )
   
