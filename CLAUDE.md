@@ -11,11 +11,13 @@ The system supports multiple usage modes:
 2. **GUI-assisted setup**: Use the Shiny apps to create configuration files, then run processing
 3. **Interactive exploration**: Use the modelling app's interactive tab to test model fits on individual TACs
 
-The two apps work sequentially but independently:
+The three apps work independently:
 - **Region Definition App**: Creates brain region definitions and combined TACs
-- **Modelling App**: Configures kinetic models and creates analysis configurations
+- **Modelling App with Plasma Input**: Configures invasive kinetic models (1TCM, 2TCM, Logan, MA1) requiring blood input data
   - Includes an interactive tab for testing model fits on individual PET measurements and regions
   - Allows users to validate model specifications and parameter bounds before full processing
+- **Modelling App with Reference Tissue**: Configures non-invasive kinetic models (SRTM, refLogan, MRTM1, MRTM2) using reference regions
+  - Same interactive capabilities as the plasma input app
 
 ## Commands
 
@@ -24,12 +26,15 @@ The two apps work sequentially but independently:
 # Load the package and launch apps
 library(kinfitrapp)
 
-# Launch both apps sequentially
-launch_apps(bids_dir = "/path/to/bids", region_definition = TRUE, modelling = TRUE)
+# Launch specific app using launcher (regiondef is default)
+launch_apps(bids_dir = "/path/to/bids")  # Launches regiondef by default
+launch_apps(app = "modelling_plasma", bids_dir = "/path/to/bids", blood_dir = "/path/to/blood")
+launch_apps(app = "modelling_ref", bids_dir = "/path/to/bids")
 
-# Or launch individual apps
+# Or launch apps directly
 region_definition_app(bids_dir = "/path/to/bids")
-modelling_app(bids_dir = "/path/to/bids")
+modelling_plasma_app(bids_dir = "/path/to/bids", blood_dir = "/path/to/blood")
+modelling_ref_app(bids_dir = "/path/to/bids")
 ```
 
 ### Container Usage
@@ -39,7 +44,7 @@ modelling_app(bids_dir = "/path/to/bids")
 
 ### Development
 - This is a proper R package with DESCRIPTION file and roxygen documentation
-- Two separate Shiny apps: `region_definition_app.R` and `modelling_app.R` in R/ directory
+- Three separate Shiny apps: `region_definition_app.R`, `modelling_plasma_app.R`, and `modelling_ref_app.R` in R/ directory
 - Parameterised reports are Rmd files located in inst/rmd/ folder (following R package convention)
 - Dependencies managed through DESCRIPTION file
 - Modular code structure with separate files for utilities, validation, and UI modules
@@ -47,13 +52,14 @@ modelling_app(bids_dir = "/path/to/bids")
 ## Architecture
 
 ### Application Structure
-- **Two-app system**: 
+- **Three-app system**:
   - `region_definition_app.R`: For defining brain regions and creating combined TACs
-  - `modelling_app.R`: For kinetic model configuration and analysis
+  - `modelling_plasma_app.R`: For invasive kinetic model configuration (1TCM, 2TCM, Logan, MA1)
+  - `modelling_ref_app.R`: For non-invasive kinetic model configuration (SRTM, refLogan, MRTM1, MRTM2)
 - **Package Structure**: Proper R package with R/, man/, data/, and inst/rmd/ directories
-- **UI Layout**: Both apps use `fluidPage` with sidebar layout
+- **UI Layout**: All apps use `fluidPage` with sidebar layout
 - **Server Logic**: Reactive expressions generate JSON configurations and process data
-- **Launcher Function**: `launch_apps()` can run either or both apps sequentially
+- **Launcher Function**: `launch_apps()` launches one app at a time with `match.arg()` validation
 
 ### Directory Structure
 The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
@@ -70,10 +76,10 @@ The system uses a standard BIDS (Brain Imaging Data Structure) directory layout:
 - **kinfitr folder**: `{derivatives_dir}/kinfitr/` - Contains shared kinfitr resources
   - `desc-combinedregions_tacs.tsv`: Combined TACs file from region definition app with seg_meanTAC column
   - Contains volume-weighted mean TAC for entire segmentations (seg_meanTAC column)
-  - Shared across all analyses and accessed by modelling app
+  - Shared across all analyses and accessed by modelling apps
   
 - **analysis folder**: `{derivatives_dir}/kinfitr/{subfolder}/` - Analysis-specific outputs
-  - Individual TACs files created by modelling app subsetting
+  - Individual TACs files created by modelling apps subsetting
   - Configuration files for specific analyses (e.g., `desc-kinfitroptions_config.json`)
   - **reports/** subfolder: Contains parameterised HTML reports for each analysis step
   - Default subfolder: "Primary_Analysis"
@@ -193,7 +199,7 @@ sub-P3_label-semiovale_tacs.tsv    → sub-P3_label-semiovale_morph.tsv
 
 ### Interactive Data Exploration System
 
-The modelling app includes a dedicated Interactive tab for manual data exploration and validation:
+Both modelling apps include a dedicated Interactive tab for manual data exploration and validation:
 
 #### Workflow
 1. **Manual File Scanning**: "Scan Analysis Folder" button to populate available PET measurements and regions
@@ -263,9 +269,9 @@ Located in `R/report_generation.R`:
 
 #### Integration with Shiny App
 
-Reports are automatically generated by button handlers in `modelling_app.R`:
+Reports are automatically generated by button handlers in the modelling apps (`modelling_plasma_app.R` and `modelling_ref_app.R`):
 - **Data Definition**: Generated after "Create Analysis Data" button execution
-- **Weights/Delay**: Generated after respective button executions  
+- **Weights/Delay**: Generated after respective button executions
 - **Model Reports**: Generated after "Fit Model X" button executions
 - **User Notifications**: Success messages inform users when reports are generated
 
@@ -341,8 +347,8 @@ showNotification("Created 15 files in analysis folder", ...)  # Too technical
 ### File Management
 - Generates config files: `desc-kinfitroptions_config.json` in analysis folder
 - **Combined TACs Files**: `desc-combinedregions_tacs.tsv` with integrated BIDS metadata
-- **Individual TACs Files**: Created by modelling app with `desc-combinedregions` naming convention
-- **State Persistence**: App automatically saves and restores configuration
+- **Individual TACs Files**: Created by modelling apps with `desc-combinedregions` naming convention
+- **State Persistence**: Apps automatically save and restore configuration
   - On startup: Checks for existing config file in analysis folder
   - If found: Restores all UI inputs to previous state with user notification
   - If corrupted: Shows error message and uses defaults
@@ -376,8 +382,8 @@ showNotification("Created 15 files in analysis folder", ...)  # Too technical
 
 4. **Individual Analysis Files**:
    **Exact column order**: `pet, region, volume_mm3, InjectedRadioactivity, bodyweight, frame_start, frame_end, frame_dur, frame_mid, TAC`
-   
-   - Created by "Create Analysis Data" button in modelling app
+
+   - Created by "Create Analysis Data" button in modelling apps
    - **pet column first**: Essential for data tracking and analysis identification
    - Essential kinetic modeling metadata positioned after volume_mm3, before frame timing
    - Use `desc-combinedregions` naming convention (not `desc-combinedtacs`)
@@ -444,8 +450,8 @@ The system detects blood data files using the pattern `"_(blood|inputfunction)\\
 - **User-friendly messaging**: File counts and helpful recommendations without technical details
 
 #### Implementation Details
-- Status display function: `delay_blood_status_display` (modelling_app.R:778-843)
-- Processing validation: `run_delay` event handler (modelling_app.R:1148-1169)
+- Status display function: `delay_blood_status_display` (in both modelling apps)
+- Processing validation: `run_delay` event handler (in both modelling apps)
 - Helper function: `check_blood_files()` for consistent file detection logic
 
 **Delay Estimation Approaches**: Comprehensive set of delay estimation methods ordered by computational speed:
@@ -492,7 +498,7 @@ The system detects blood data files using the pattern `"_(blood|inputfunction)\\
    - Added to `desc-combinedregions_tacs.tsv` as additional column
 
 2. **Modelling App**:
-   - Reads unique `desc` values from combined regions file to populate external segmentation dropdown
+   - Reads unique `segmentation` values from combined regions file to populate external segmentation dropdown
    - Default weights region type is now "Mean of external segmentation" (optimal approach)
    - Validates combined regions files exist before allowing weights calculation
 

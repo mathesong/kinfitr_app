@@ -21,14 +21,17 @@ cd singularity/
 ### Interactive Mode
 
 ```bash
-# Modelling app (most common usage)
-./run-interactive.sh --bids-dir /path/to/your/bids
+# Modelling app with plasma input
+./run-interactive.sh --func modelling_plasma --bids-dir /path/to/your/bids --blood-dir /path/to/blood
+
+# Modelling app with reference tissue
+./run-interactive.sh --func modelling_ref --bids-dir /path/to/your/bids
 
 # Region definition app
-./run-regiondef.sh --bids-dir /path/to/your/bids
+./run-interactive.sh --func regiondef --bids-dir /path/to/your/bids
 
 # With custom port for server usage
-./run-interactive.sh --host-port 8080 --bids-dir /path/to/your/bids
+./run-interactive.sh --func modelling_plasma --host-port 8080 --bids-dir /path/to/your/bids --blood-dir /path/to/blood
 ```
 
 Then open http://localhost:3838 (or your custom port) in your browser.
@@ -36,11 +39,14 @@ Then open http://localhost:3838 (or your custom port) in your browser.
 ### Automatic Mode
 
 ```bash
-# Full pipeline execution
-./run-automatic.sh --derivatives-dir /path/to/derivatives --blood-dir /path/to/blood
+# Full pipeline execution with plasma input
+./run-automatic.sh --func modelling_plasma --derivatives-dir /path/to/derivatives --blood-dir /path/to/blood
+
+# Full pipeline execution with reference tissue
+./run-automatic.sh --func modelling_ref --derivatives-dir /path/to/derivatives
 
 # Single step execution
-./run-automatic.sh --derivatives-dir /path/to/derivatives --step weights
+./run-automatic.sh --func modelling_plasma --derivatives-dir /path/to/derivatives --step weights
 ```
 
 ## Files Overview
@@ -51,9 +57,8 @@ Then open http://localhost:3838 (or your custom port) in your browser.
 - `README.md` - This documentation file
 
 ### Run Scripts
-- `run-interactive.sh` - Interactive mode for both modelling and region definition apps
+- `run-interactive.sh` - Interactive mode for region definition, plasma input, and reference tissue modelling apps
 - `run-automatic.sh` - Automatic/batch processing mode
-- `run-regiondef.sh` - Specialized region definition app launcher
 
 ## Building the Container
 
@@ -104,27 +109,50 @@ Interactive mode launches a Shiny web application accessible via browser.
 #### Region Definition App
 ```bash
 # Basic region definition
-./run-regiondef.sh --bids-dir /data/study_bids
+./run-interactive.sh --func regiondef --bids-dir /data/study_bids
 
 # With custom derivatives location
-./run-regiondef.sh \
+./run-interactive.sh \
+  --func regiondef \
   --bids-dir /data/study_bids \
   --derivatives-dir /analysis/derivatives
 ```
 
-#### Modelling App
+#### Modelling App with Plasma Input
 ```bash
 # Basic usage
-./run-interactive.sh --bids-dir /data/study_bids
+./run-interactive.sh --func modelling_plasma --bids-dir /data/study_bids --blood-dir /data/blood
 
 # With all directories specified
 ./run-interactive.sh \
+  --func modelling_plasma \
   --bids-dir /data/study_bids \
   --derivatives-dir /analysis/derivatives \
   --blood-dir /data/blood
 
 # Custom port and analysis settings
 ./run-interactive.sh \
+  --func modelling_plasma \
+  --bids-dir /data/study_bids \
+  --blood-dir /data/blood \
+  --host-port 8080 \
+  --analysis-folder "Custom_Analysis"
+```
+
+#### Modelling App with Reference Tissue
+```bash
+# Basic usage
+./run-interactive.sh --func modelling_ref --bids-dir /data/study_bids
+
+# With all directories specified
+./run-interactive.sh \
+  --func modelling_ref \
+  --bids-dir /data/study_bids \
+  --derivatives-dir /analysis/derivatives
+
+# Custom port and analysis settings
+./run-interactive.sh \
+  --func modelling_ref \
   --bids-dir /data/study_bids \
   --host-port 8080 \
   --analysis-folder "Custom_Analysis"
@@ -138,28 +166,36 @@ Automatic mode runs processing pipelines without user interaction, ideal for bat
 
 #### Full Pipeline
 ```bash
-# Complete analysis pipeline
+# Complete analysis pipeline with plasma input
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /analysis/derivatives \
   --blood-dir /data/blood
+
+# Complete analysis pipeline with reference tissue
+./run-automatic.sh \
+  --func modelling_ref \
+  --derivatives-dir /analysis/derivatives
 ```
 
 #### Step-by-Step Processing
 ```bash
 # Data definition step
-./run-automatic.sh --derivatives-dir /analysis/derivatives --step datadef
+./run-automatic.sh --func modelling_plasma --derivatives-dir /analysis/derivatives --step datadef
 
 # Weights calculation
-./run-automatic.sh --derivatives-dir /analysis/derivatives --step weights
+./run-automatic.sh --func modelling_plasma --derivatives-dir /analysis/derivatives --step weights
 
 # Delay fitting (requires blood data)
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /analysis/derivatives \
   --blood-dir /data/blood \
   --step delay
 
 # Model fitting steps
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /analysis/derivatives \
   --blood-dir /data/blood \
   --step model1
@@ -170,19 +206,27 @@ Automatic mode runs processing pipelines without user interaction, ideal for bat
 If you prefer to use Singularity directly:
 
 ```bash
-# Interactive modelling app
+# Interactive modelling app with plasma input
+singularity run \
+  --bind /data/bids:/data/bids_dir \
+  --bind /analysis/derivatives:/data/derivatives_dir \
+  --bind /data/blood:/data/blood_dir \
+  kinfitr_latest.sif \
+  --func modelling_plasma
+
+# Interactive modelling app with reference tissue
 singularity run \
   --bind /data/bids:/data/bids_dir \
   --bind /analysis/derivatives:/data/derivatives_dir \
   kinfitr_latest.sif \
-  --func modelling
+  --func modelling_ref
 
 # Automatic processing
 singularity run \
   --bind /analysis/derivatives:/data/derivatives_dir \
   --bind /data/blood:/data/blood_dir \
   kinfitr_latest.sif \
-  --func modelling --mode automatic --step weights
+  --func modelling_plasma --mode automatic --step weights
 ```
 
 ## HPC Integration
@@ -202,8 +246,10 @@ module load singularity
 
 # Run interactive app (use salloc for interactive session)
 ./run-interactive.sh \
+  --func modelling_plasma \
   --bids-dir /scratch/project/bids_data \
   --derivatives-dir /scratch/project/derivatives \
+  --blood-dir /scratch/project/blood \
   --host-port 8080
 ```
 
@@ -226,6 +272,7 @@ CURRENT_ANALYSIS=${ANALYSIS_FOLDERS[$SLURM_ARRAY_TASK_ID-1]}
 echo "Processing analysis: $CURRENT_ANALYSIS"
 
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /scratch/project/derivatives \
   --blood-dir /scratch/project/blood \
   --analysis-folder "$CURRENT_ANALYSIS"
@@ -242,6 +289,7 @@ module load singularity
 
 # Run specific processing step
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /scratch/project/derivatives \
   --step weights \
   --analysis-folder "$1"  # Pass analysis folder as argument
@@ -260,6 +308,7 @@ cd $PBS_O_WORKDIR
 module load singularity
 
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /data/derivatives \
   --blood-dir /data/blood \
   --analysis-folder "Primary_Analysis"
@@ -277,6 +326,7 @@ module load singularity
 module load singularity
 
 ./run-automatic.sh \
+  --func modelling_plasma \
   --derivatives-dir /data/derivatives \
   --analysis-folder "Analysis_$(printf %03d $LSB_JOBINDEX)"
 ```
@@ -388,7 +438,7 @@ blood_dir/
 export SINGULARITY_VERBOSE=true
 
 # Debug container execution
-singularity run --debug container.sif --func modelling --help
+singularity run --debug container.sif --func modelling_plasma --help
 ```
 
 ## Performance Considerations
@@ -426,8 +476,8 @@ If you're familiar with the Docker implementation:
 
 | Docker Command | Singularity Equivalent |
 |----------------|------------------------|
-| `docker run -it --rm -v /data:/data/bids_dir -p 3838:3838 kinfitr --func modelling` | `singularity run --bind /data:/data/bids_dir kinfitr.sif --func modelling` |
-| `docker-compose up kinfitr-interactive` | `./run-interactive.sh --bids-dir /data` |
+| `docker run -it --rm -v /data:/data/bids_dir -p 3838:3838 kinfitr --func modelling_plasma` | `singularity run --bind /data:/data/bids_dir kinfitr.sif --func modelling_plasma` |
+| `docker-compose up kinfitr-modelling-plasma` | `./run-interactive.sh --func modelling_plasma --bids-dir /data` |
 | `docker build -t kinfitr .` | `./build.sh --name kinfitr` |
 
 The command-line arguments and functionality remain identical between Docker and Singularity versions.

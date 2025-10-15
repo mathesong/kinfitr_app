@@ -6,13 +6,22 @@ This directory contains Docker implementation files for running the kinfitr regi
 
 ### Interactive Mode (Default)
 ```bash
-# Modelling app (most common usage)
+# Modelling app with plasma input
+docker run -it --rm \
+  --user $(id -u):$(id -g) \
+  -v /path/to/your/bids:/data/bids_dir \
+  -v /path/to/your/blood:/data/blood_dir \
+  -p 3838:3838 \
+  mathesong/kinfitr:latest \
+  --func modelling_plasma
+
+# Modelling app with reference tissue
 docker run -it --rm \
   --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir \
   -p 3838:3838 \
   mathesong/kinfitr:latest \
-  --func modelling
+  --func modelling_ref
 
 # Region definition app
 docker run -it --rm \
@@ -27,13 +36,21 @@ Then open http://localhost:3838 in your browser.
 
 ### Automatic Mode
 ```bash
-# Full pipeline execution
+# Full pipeline execution with plasma input
 docker run -it --rm \
   --user $(id -u):$(id -g) \
   -v /path/to/derivatives:/data/derivatives_dir \
   -v /path/to/blood:/data/blood_dir \
   mathesong/kinfitr:latest \
-  --func modelling \
+  --func modelling_plasma \
+  --mode automatic
+
+# Full pipeline execution with reference tissue
+docker run -it --rm \
+  --user $(id -u):$(id -g) \
+  -v /path/to/derivatives:/data/derivatives_dir \
+  mathesong/kinfitr:latest \
+  --func modelling_ref \
   --mode automatic
 
 # Single step execution
@@ -41,7 +58,7 @@ docker run -it --rm \
   --user $(id -u):$(id -g) \
   -v /path/to/derivatives:/data/derivatives_dir \
   mathesong/kinfitr:latest \
-  --func modelling \
+  --func modelling_plasma \
   --mode automatic \
   --step weights
 ```
@@ -49,7 +66,7 @@ docker run -it --rm \
 ## Command Line Arguments
 
 ### Required
-- `--func`: Application function (`regiondef` or `modelling`)
+- `--func`: Application function (`regiondef`, `modelling_plasma`, or `modelling_ref`)
 
 ### Optional
 - `--mode`: Execution mode (`interactive` [default] or `automatic`)
@@ -79,9 +96,7 @@ You can mount directories in several ways:
 ```
 
 ### Blood Data Requirements
-Blood data is only required when:
-- Delay fitting is enabled (not "none" or "zero")
-- AND at least one invasive model is configured (`1TCM`, `2TCM`, `Logan`, `MA1`)
+Blood data is required when using the plasma input app (`modelling_plasma`).
 
 ## Port Configuration
 
@@ -104,18 +119,19 @@ The container exposes port 3838 internally. You can map it to any external port:
 ```bash
 # Use docker-compose for easy testing
 cd docker/
-docker-compose up kinfitr-interactive
+docker-compose up kinfitr-modelling-plasma
 ```
 
 ### Production Usage
 ```bash
-# Run modelling app on server port 8080
+# Run modelling app with plasma input on server port 8080
 docker run -d --name kinfitr-server \
   --user $(id -u):$(id -g) \
   -v /data/bids:/data/bids_dir \
+  -v /data/blood:/data/blood_dir \
   -p 8080:3838 \
   mathesong/kinfitr:latest \
-  --func modelling
+  --func modelling_plasma
 ```
 
 ### Batch Processing
@@ -127,7 +143,7 @@ for analysis in Analysis1 Analysis2 Analysis3; do
     -v /data/derivatives:/data/derivatives_dir \
     -v /data/blood:/data/blood_dir \
     mathesong/kinfitr:latest \
-    --func modelling \
+    --func modelling_plasma \
     --mode automatic \
     --analysis_foldername "$analysis"
 done
@@ -162,7 +178,7 @@ docker build -f docker/Dockerfile -t kinfitr:local .
 # Test with docker-compose
 cd docker/
 docker-compose build
-docker-compose up kinfitr-interactive
+docker-compose up kinfitr-modelling-plasma
 ```
 
 ## File Structure

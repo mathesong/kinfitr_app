@@ -1,8 +1,8 @@
 version: '3.8'
 
 services:
-  kinfitr-interactive:
-    build: 
+  kinfitr-modelling-plasma:
+    build:
       context: ../
       dockerfile: docker/Dockerfile
       args:
@@ -17,8 +17,26 @@ services:
       - ./test_data/bids:/data/bids_dir
       - ./test_data/derivatives:/data/derivatives_dir
       - ./test_data/blood:/data/blood_dir
-    command: ["--func", "modelling", "--mode", "interactive"]
-    container_name: kinfitr-interactive
+    command: ["--func", "modelling_plasma", "--mode", "interactive"]
+    container_name: kinfitr-modelling-plasma
+
+  kinfitr-modelling-ref:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USER_NAME: kinfitr
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    ports:
+      - "3840:3838"
+    volumes:
+      # Example mounts - adjust paths as needed for testing
+      - ./test_data/bids:/data/bids_dir
+      - ./test_data/derivatives:/data/derivatives_dir
+    command: ["--func", "modelling_ref", "--mode", "interactive"]
+    container_name: kinfitr-modelling-ref
     
   kinfitr-regiondef:
     build: 
@@ -37,8 +55,8 @@ services:
     command: ["--func", "regiondef", "--mode", "interactive"]
     container_name: kinfitr-regiondef
     
-  kinfitr-auto-full:
-    build: 
+  kinfitr-auto-plasma-full:
+    build:
       context: ../
       dockerfile: docker/Dockerfile
       args:
@@ -50,11 +68,11 @@ services:
       # Example mounts for automatic processing
       - ./test_data/derivatives:/data/derivatives_dir
       - ./test_data/blood:/data/blood_dir
-    command: ["--func", "modelling", "--mode", "automatic"]
-    container_name: kinfitr-auto-full
-    
-  kinfitr-auto-step:
-    build: 
+    command: ["--func", "modelling_plasma", "--mode", "automatic"]
+    container_name: kinfitr-auto-plasma-full
+
+  kinfitr-auto-plasma-step:
+    build:
       context: ../
       dockerfile: docker/Dockerfile
       args:
@@ -66,8 +84,38 @@ services:
       # Example mounts for step-specific processing
       - ./test_data/derivatives:/data/derivatives_dir
       - ./test_data/blood:/data/blood_dir
-    command: ["--func", "modelling", "--mode", "automatic", "--step", "weights"]
-    container_name: kinfitr-auto-step
+    command: ["--func", "modelling_plasma", "--mode", "automatic", "--step", "weights"]
+    container_name: kinfitr-auto-plasma-step
+
+  kinfitr-auto-ref-full:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USER_NAME: kinfitr
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    volumes:
+      # Example mounts for automatic processing
+      - ./test_data/derivatives:/data/derivatives_dir
+    command: ["--func", "modelling_ref", "--mode", "automatic"]
+    container_name: kinfitr-auto-ref-full
+
+  kinfitr-auto-ref-step:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        USER_NAME: kinfitr
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    volumes:
+      # Example mounts for step-specific processing
+      - ./test_data/derivatives:/data/derivatives_dir
+    command: ["--func", "modelling_ref", "--mode", "automatic", "--step", "weights"]
+    container_name: kinfitr-auto-ref-step
 
 # User Configuration:
 # Copy .env.example to .env and adjust USER_ID/GROUP_ID if needed
@@ -76,19 +124,29 @@ services:
 #
 # Example usage commands:
 #
-# Interactive modelling app:
-# docker-compose up kinfitr-interactive
+# Interactive plasma input modelling app:
+# docker-compose up kinfitr-modelling-plasma
 # Then open http://localhost:3838
 #
+# Interactive reference tissue modelling app:
+# docker-compose up kinfitr-modelling-ref
+# Then open http://localhost:3840
+#
 # Interactive region definition app:
-# docker-compose up kinfitr-regiondef  
+# docker-compose up kinfitr-regiondef
 # Then open http://localhost:3839
 #
-# Automatic full pipeline:
-# docker-compose up kinfitr-auto-full
+# Automatic plasma full pipeline:
+# docker-compose up kinfitr-auto-plasma-full
 #
-# Automatic specific step:
-# docker-compose up kinfitr-auto-step
+# Automatic plasma specific step:
+# docker-compose up kinfitr-auto-plasma-step
+#
+# Automatic reference tissue full pipeline:
+# docker-compose up kinfitr-auto-ref-full
+#
+# Automatic reference tissue specific step:
+# docker-compose up kinfitr-auto-ref-step
 #
 # Build only:
 # docker-compose build

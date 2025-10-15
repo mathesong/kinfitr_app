@@ -726,7 +726,7 @@ walk(resplots, ~print(.x))
 
 
 
-# Saving
+# Saving Parameters
 
 ## Main TSV
 
@@ -783,6 +783,78 @@ walk2(savepar_pet$jsondat,
       savepar_pet$filename_json, 
       ~writeLines(.x, .y))
 ```
+
+# Saving Fitted Values
+
+## PET Folder TSVs
+
+```{r}
+savefits <- model_data %>% 
+  filter(success) %>% 
+  mutate(fitvals = map(fit_2tcm, ~{
+    
+    interpfitvals <- tibble(
+      Time = seq(from=min(.x$tacs$Time),
+                  to=max(.x$tacs$Time),
+                  length.out=500)) %>% 
+      mutate(Target_fitted = predict(.x$fit, newdata = list(t_tac = Time, 
+        tac = pracma::interp1(.x$tacs$Time, .x$tacs$Target, 
+                              xi = .x$input$Time, method = "linear"))))
+        
+    .x$tacs %>% 
+      mutate(Weights = .x$weights) %>% 
+      full_join(interpfitvals) %>% 
+      # mutate(frame_start = Time - 0.5*Duration,
+      #        frame_end = Time + 0.5*Duration) %>% 
+      select(
+        # frame_start,
+        # frame_end,
+        frame_mid = Time,
+        # frame_dur = Duration,
+        TAC = Target,
+        TAC_fitted = Target_fitted,
+        weights=Weights
+        ) %>% 
+      arrange(frame_mid)
+  })) %>% 
+  select(sub, ses, task, trc, run, rec, pet, region, inpshift, vB, fitvals) %>% 
+  unnest(cols=c("fitvals")) %>% 
+  group_by(across(intersect(colnames(.), c("sub", "ses", "trc", "rec", "task", 
+                                           "run", "pet")))) %>% 
+  nest(.key="fitvals")
+
+savefits_pet <- savefits %>% 
+  inner_join(folder_data) %>% 
+  mutate(filename = paste0(analysis_folder, "/", dirname, "/", pet, "_", 
+                           "model_", "2TCM","_",
+                            "desc-", desc,"fitted",
+                            "_",
+                            "tacs.tsv"))
+
+walk2(savefits_pet$fitvals, savefits_pet$filename, ~write_tsv(.x, .y))
+```
+
+```{r}
+savefits_pet <- savefits_pet %>% 
+  group_by(pet) %>% 
+  mutate(jsondat = map(fitvals, ~list(
+      Description = "Two tissue compartment model fitted values.",
+      ModelName = "2TCM",
+      AdditionalModelDetails = str_glue("vB source: {config_items$`vB Parameter Source`}. Blood delay source: {delay_source}"),
+      frame_mid = "The frame middle time in minutes",
+      TAC = paste("TAC radioactivity data in kBq to which the model was fitted.",
+                  "If there is a vB, this is after removal of blood radioactivity."),
+      TAC_fitted = "Model fitted values.",
+      weights = "Model weights"))) %>% 
+  mutate(jsondat = jsonlite::toJSON(jsondat, pretty = TRUE, auto_unbox = TRUE)) %>% 
+  mutate(filename_json = str_replace(filename, ".tsv", ".json"))
+  
+walk2(savefits_pet$jsondat, 
+      savefits_pet$filename_json, 
+      ~writeLines(.x, .y))
+```
+
+
 
 
 # Session Information

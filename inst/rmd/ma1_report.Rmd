@@ -1,5 +1,5 @@
 ---
-title: "Logan Graphical Analysis Model Fitting Report"
+title: "Ichise Multilinear Analysis 1 (MA1) Model Fitting Report"
 output: 
   html_document:
     toc: true
@@ -63,11 +63,11 @@ oldfiles <- list.files(analysis_folder, pattern=desc,
 file.remove(oldfiles)
 ```
 
-This report summarises the Logan graphical analysis results for the kinfitr analysis pipeline.
+This report summarises the MA1 results for the kinfitr analysis pipeline.
 
 # Analysis Configuration
 
-**Model:** `r params$model_number` - Logan (Logan Graphical Analysis)
+**Model:** `r params$model_number` - Ichise Multilinear Analysis 1 (MA1)
 
 **Analysis folder:** `r params$analysis_folder`
 
@@ -88,10 +88,10 @@ if (!is.null(config$Models)) {
   }
 }
 
-if (!is.null(model_config) && model_config$type == "Logan") {
+if (!is.null(model_config) && model_config$type == "MA1") {
   # Create configuration table
   config_items <- list(
-    "Model Type" = "Logan (Logan Graphical Analysis)"
+    "Model Type" = "Ichise Multilinear Analysis 1 (MA1)"
   )
 
   # Add t* configuration
@@ -148,20 +148,20 @@ if (!is.null(model_config) && model_config$type == "Logan") {
     Value = map_chr(config_items, as.character)
   )
 
-  kable(config_df, caption = "Logan Model Configuration")
+  kable(config_df, caption = "MA1 Model Configuration")
 
 } else {
-  cat("Logan model configuration not found or incomplete.")
+  cat("MA1 model configuration not found or incomplete.")
 }
 ```
 
 ```{r setup-conditions, echo=FALSE}
-# Verify we have a valid Logan configuration
-has_logan_config <- !is.null(model_config) && model_config$type == "Logan"
+# Verify we have a valid MA1 configuration
+has_MA1_config <- !is.null(model_config) && model_config$type == "MA1"
 
-# Exit early if not a Logan configuration
-if (!has_logan_config) {
-  cat("Invalid or missing Logan configuration. This report should not have been generated.")
+# Exit early if not a MA1 configuration
+if (!has_MA1_config) {
+  cat("Invalid or missing MA1 configuration. This report should not have been generated.")
   knitr::knit_exit()
 }
 ```
@@ -353,17 +353,21 @@ if(!is.null(model_config$vB_source) &&
 
 
 ```{r heading-vB, echo=vB_inheritance, eval=vB_inheritance, results='asis'}
+vB_inheritance_model <- str_match(model_config$vB_source, "inherit_(model\\d)")[,2]
+vB_inheritance_type <- str_match(model_config$vB_source, "inherit_model\\d_(\\w*)")[,2]
+
+vB_inheritance_model_text <- str_to_title(vB_inheritance_model)
+vB_inheritance_model_text <- str_replace(vB_inheritance_model_text, 
+                                         "Model", "Model ")
+
 str_glue("## Loading vB Information
          
-         The model has been defined to inherit a vB value from a previous model run.
+         The model has been defined to inherit the vB value from {vB_inheritance_model_text}.
          ")
 ```
 
 
 ```{r load-vB, echo=vB_inheritance, eval=vB_inheritance}
-vB_inheritance_model <- str_match(model_config$vB_source, "inherit_(model\\d)")[,2]
-vB_inheritance_type <- str_match(model_config$vB_source, "inherit_model\\d_(\\w*)")[,2]
-
 vB_data <- tibble(
   filename = list.files(analysis_folder, 
                         pattern = paste0("*_desc-", vB_inheritance_model,"_kinpar.tsv"), 
@@ -445,9 +449,9 @@ model_data <- model_data %>%
 ```
 
 
-# Logan Model Fitting
+# MA1 Model Fitting
 
-Now we proceed to the actual Logan model fitting using all available regional TACs.
+Now we proceed to the actual MA1 model fitting using all available regional TACs.
 
 
 ```{r model-prep}
@@ -471,25 +475,26 @@ if (!is.null(subset_config) && (!is.null(subset_config$start) || !is.null(subset
 ```
 
 ```{r model-fitting}
-# Safe Logan function to handle errors
-safe_Loganplot <- possibly(Loganplot, otherwise = NA)
+# Safe MA1 function to handle errors
+safe_MA1 <- possibly(ma1, otherwise = NA)
 
 model_data <- model_data %>%
   group_by(output_stem, region) %>%
-  mutate(fit_Logan = pmap(list(tacs, input, inpshift, vB),
-                         ~safe_Loganplot(
+  mutate(fit_MA1 = pmap(list(tacs, input, inpshift, vB),
+                         ~safe_MA1(
                            t_tac = ..1$frame_mid,
                            tac = ..1$TAC,
                            input = ..2,
                            tstar = as.numeric(model_config$tstar),
                            tstar_type = model_config$tstar_type,
+                           weights = ..1$weights,
                            inpshift = ..3,
                            vB = ..4,
                            dur = ..1$frame_dur,
                            frameStartEnd = frameStartEnd,
                            timeStartEnd = timeStartEnd))) %>%
   ungroup() %>%
-  mutate(success = map_dbl(fit_Logan, length) > 1)
+  mutate(success = map_dbl(fit_MA1, length) > 1)
 ```
 
 ```{r, results='asis'}
@@ -515,8 +520,8 @@ model_data <- model_data %>%
 ```{r}
 model_res <- model_data %>% 
   ungroup() %>% 
-  mutate(par = map(fit_Logan, "par")) %>% 
-  select(-fit_Logan, -tacs, -input)
+  mutate(par = map(fit_MA1, "par")) %>% 
+  select(-fit_MA1, -tacs, -input)
 ```
 
 ### Estimates
@@ -540,8 +545,8 @@ Here is shown the standard error as a fraction of the mean value (i.e. 1 = 100\%
 ```{r}
 par_se_table <- model_data %>% 
   ungroup() %>% 
-  mutate(par.se = map(fit_Logan, "par.se")) %>% 
-  select(-fit_Logan, -tacs, -input) %>% 
+  mutate(par.se = map(fit_MA1, "par.se")) %>% 
+  select(-fit_MA1, -tacs, -input) %>% 
   select(-output_stem) %>% 
   select(where(~ n_distinct(.x) > 1)) %>% 
   select(-any_of(c("vB", "inpshift"))) %>% 
@@ -566,12 +571,12 @@ reduced_chisq <- function(fit) {
 
 gof_table <- model_data %>% 
   ungroup() %>% 
-  mutate(gof = map(fit_Logan, ~tibble(
+  mutate(gof = map(fit_MA1, ~tibble(
     AIC = AIC(.x$fit),
     BIC = BIC(.x$fit),
     RSS = RSS(.x$fit),
     reduced_chisq = reduced_chisq(.x$fit)))) %>% 
-  select(-fit_Logan, -tacs, -input) %>% 
+  select(-fit_MA1, -tacs, -input) %>% 
   select(-output_stem) %>% 
   select(where(~ n_distinct(.x) > 1)) %>% 
   select(-any_of(c("vB", "inpshift"))) %>% 
@@ -618,7 +623,7 @@ ggplot(par_table_long, aes(x=Value, fill=region)) +
 ```{r, fig.height=4, fig.width=6}
 fitplots <- model_data %>% 
   mutate(title = paste(pet, " : ", region)) %>% 
-  mutate(fitplot = pmap(list(fit_Logan, region, title), 
+  mutate(fitplot = pmap(list(fit_MA1, region, title), 
                         ~plot(..1, roiname=..2) + 
                           labs(title = ..3,
                                y = "Radioactivity (kBq)",
@@ -633,7 +638,7 @@ walk(fitplots, ~print(.x))
 ```{r, fig.height=4, fig.width=6}
 resplots <- model_data %>% 
   mutate(title = paste(pet, " : ", region)) %>% 
-  mutate(resplot = pmap(list(fit_Logan, title), 
+  mutate(resplot = pmap(list(fit_MA1, title), 
                         ~plot_residuals(..1) + 
                           labs(title = ..2))) %>% 
   pull(resplot)
@@ -658,7 +663,7 @@ savepar <- inner_join(par_table,
 
 write_tsv(savepar, 
           file=paste0(analysis_folder, "/", 
-                      "model_", "Logan","_",
+                      "model_", "MA1","_",
                       "desc-", desc,"_",
                       "kinpar.tsv"))
 ```
@@ -680,7 +685,7 @@ savepar_pet <- savepar %>%
   nest(.key="kinpars") %>% 
   inner_join(folder_data) %>% 
   mutate(filename = paste0(analysis_folder, "/", dirname, "/", pet, "_", 
-                           "model_", "Logan","_",
+                           "model_", "MA1","_",
                             "desc-", desc,"_",
                             "kinpar.tsv"))
 
@@ -691,8 +696,8 @@ walk2(savepar_pet$kinpars, savepar_pet$filename, ~write_tsv(.x, .y))
 savepar_pet <- savepar_pet %>% 
   group_by(pet) %>% 
   mutate(jsondat = map(kinpars, ~list(
-      Description = "Logan Graphical Analysis using least squares estimation.",
-      ModelName = "Logan",
+      Description = "MA1 model fit using least squares estimation.",
+      ModelName = "MA1",
       AdditionalModelDetails = str_glue("vB source: {config_items$`vB Parameter Source`}. Blood delay source: {delay_source}")))) %>% 
   mutate(jsondat = jsonlite::toJSON(jsondat, pretty = TRUE, auto_unbox = TRUE)) %>% 
   mutate(filename_json = str_replace(filename, ".tsv", ".json"))
@@ -710,8 +715,8 @@ walk2(savepar_pet$jsondat,
 ```{r}
 savefits <- model_data %>% 
   filter(success) %>% 
-  mutate(fitvals = map(fit_Logan, ~{
-    bind_cols(.x$tacs, .x$fitvals) %>%
+  mutate(fitvals = map(fit_MA1, ~{
+    full_join(.x$tacs, .x$fitvals) %>% 
       mutate(frame_start = Time - 0.5*Duration,
              frame_end = Time + 0.5*Duration) %>% 
       select(
@@ -720,17 +725,9 @@ savefits <- model_data %>%
         frame_mid = Time,
         frame_dur = Duration,
         TAC = Target,
-        Logan_x = Logan_Plasma,
-        Logan_y = Logan_ROI) %>% 
-      mutate(Logan_fitted = as.numeric(.x$fit$coefficients[1]) + 
-          Logan_x * as.numeric(.x$fit$coefficients[2]),
-        ) %>% 
-      mutate(frames_from_end = n() - (1:n())+1) %>% 
-      mutate(Logan_fitted = ifelse(frames_from_end < .x$tstarIncludedFrames,
-                                   yes = Logan_fitted,
-                                   no = NA)) %>% 
-      filter(!is.na(Logan_x)) %>% 
-      select(-frames_from_end)
+        TAC_fitted = Target_fitted,
+        weights=Weights
+        )
   })) %>% 
   select(sub, ses, task, trc, run, rec, pet, region, inpshift, vB, fitvals) %>% 
   unnest(cols=c("fitvals")) %>% 
@@ -741,7 +738,7 @@ savefits <- model_data %>%
 savefits_pet <- savefits %>% 
   inner_join(folder_data) %>% 
   mutate(filename = paste0(analysis_folder, "/", dirname, "/", pet, "_", 
-                           "model_", "Logan","_",
+                           "model_", "MA1","_",
                             "desc-", desc,"fitted",
                             "_",
                             "tacs.tsv"))
@@ -753,15 +750,14 @@ walk2(savefits_pet$fitvals, savefits_pet$filename, ~write_tsv(.x, .y))
 savefits_pet <- savefits_pet %>% 
   group_by(pet) %>% 
   mutate(jsondat = map(fitvals, ~list(
-      Description = "Logan graphical analysis fitted values.",
-      ModelName = "Logan",
+      Description = "MA1 model fitted values.",
+      ModelName = "MA1",
       AdditionalModelDetails = str_glue("vB source: {config_items$`vB Parameter Source`}. Blood delay source: {delay_source}"),
       frame_mid = "The frame middle time in minutes",
-      TAC = paste("TAC radioactivity data in kBq.",
+      TAC = paste("TAC radioactivity data in kBq to which the model was fitted.",
                   "If there is a vB, this is after removal of blood radioactivity."),
-      Logan_x = "Transformed values for the x axis of the Logan plot",
-      Logan_y = "Transformed values for the y axis of the Logan plot",
-      Logan_fitted = "Model fitted values"))) %>% 
+      TAC_fitted = "Model fitted values",
+      weights = "Model weights"))) %>% 
   mutate(jsondat = jsonlite::toJSON(jsondat, pretty = TRUE, auto_unbox = TRUE)) %>% 
   mutate(filename_json = str_replace(filename, ".tsv", ".json"))
   

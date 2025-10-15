@@ -7,8 +7,8 @@ library(optparse)
 
 # Define command line options
 option_list <- list(
-  make_option(c("--func"), type="character", default=NULL, 
-              help="App function to run: 'regiondef' or 'modelling' [required]"),
+  make_option(c("--func"), type="character", default=NULL,
+              help="App function to run: 'regiondef', 'modelling_plasma', or 'modelling_ref' [required]"),
   make_option(c("--mode"), type="character", default="interactive", 
               help="Execution mode: 'interactive' or 'automatic' [default: interactive]"),
   make_option(c("--step"), type="character", default=NULL, 
@@ -27,11 +27,11 @@ opt <- parse_args(opt_parser)
 # Validate required arguments
 if (is.null(opt$func)) {
   print_help(opt_parser)
-  stop("--func is required: specify 'regiondef' or 'modelling'", call.=FALSE)
+  stop("--func is required: specify 'regiondef', 'modelling_plasma', or 'modelling_ref'", call.=FALSE)
 }
 
-if (!opt$func %in% c("regiondef", "modelling")) {
-  stop("--func must be 'regiondef' or 'modelling'", call.=FALSE)
+if (!opt$func %in% c("regiondef", "modelling_plasma", "modelling_ref")) {
+  stop("--func must be 'regiondef', 'modelling_plasma', or 'modelling_ref'", call.=FALSE)
 }
 
 if (!opt$mode %in% c("interactive", "automatic")) {
@@ -121,8 +121,15 @@ if (opt$mode == "interactive") {
       derivatives_dir = dirs$derivatives_dir,
       kinfitr_output_foldername = opt$kinfitr_output_foldername
     )
-  } else if (opt$func == "modelling") {
-    modelling_app(
+  } else if (opt$func == "modelling_plasma") {
+    modelling_plasma_app(
+      bids_dir = dirs$bids_dir,
+      derivatives_dir = dirs$derivatives_dir,
+      blood_dir = dirs$blood_dir,
+      subfolder = opt$analysis_foldername
+    )
+  } else if (opt$func == "modelling_ref") {
+    modelling_ref_app(
       bids_dir = dirs$bids_dir,
       derivatives_dir = dirs$derivatives_dir,
       blood_dir = dirs$blood_dir,

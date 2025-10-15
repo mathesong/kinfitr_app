@@ -7,6 +7,7 @@ set -e
 
 # Default values
 CONTAINER="kinfitr_latest.sif"
+FUNC=""
 DERIVATIVES_DIR=""
 BLOOD_DIR=""
 STEP=""
@@ -22,6 +23,7 @@ Usage: $0 [options]
 
 Options:
     -c, --container PATH     Path to Singularity container (default: $CONTAINER)
+    -f, --func FUNC          App function: 'modelling_plasma' or 'modelling_ref' [required]
     --derivatives-dir PATH   Path to derivatives directory to mount [required]
     --blood-dir PATH         Path to blood data directory to mount
     --step STEP              Specific step to run (optional)
@@ -40,17 +42,20 @@ Step Options:
     If no step specified, runs full pipeline based on configuration
 
 Examples:
-    # Full pipeline execution
-    $0 --derivatives-dir /path/to/derivatives --blood-dir /path/to/blood
+    # Full pipeline execution with plasma input models
+    $0 --func modelling_plasma --derivatives-dir /path/to/derivatives --blood-dir /path/to/blood
+
+    # Full pipeline execution with reference tissue models
+    $0 --func modelling_ref --derivatives-dir /path/to/derivatives
 
     # Run specific step only
-    $0 --derivatives-dir /path/to/derivatives --step weights
+    $0 --func modelling_plasma --derivatives-dir /path/to/derivatives --step weights
 
     # Custom analysis folder
-    $0 --derivatives-dir /path/to/derivatives --analysis-folder "Study_A"
+    $0 --func modelling_ref --derivatives-dir /path/to/derivatives --analysis-folder "Study_A"
 
     # Custom container
-    $0 --container ./kinfitr_dev.sif --derivatives-dir /path/to/derivatives
+    $0 --container ./kinfitr_dev.sif --func modelling_plasma --derivatives-dir /path/to/derivatives
 
 Requirements:
     - derivatives-dir must contain kinfitr folder with analysis subfolder
@@ -71,6 +76,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -c|--container)
             CONTAINER="$2"
+            shift 2
+            ;;
+        -f|--func)
+            FUNC="$2"
             shift 2
             ;;
         --derivatives-dir)
@@ -106,6 +115,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
+if [ -z "$FUNC" ]; then
+    echo "Error: --func is required"
+    echo "Use --help for more information"
+    exit 1
+fi
+
+if [ "$FUNC" != "modelling_plasma" ] && [ "$FUNC" != "modelling_ref" ]; then
+    echo "Error: --func must be 'modelling_plasma' or 'modelling_ref'"
+    exit 1
+fi
+
 if [ -z "$DERIVATIVES_DIR" ]; then
     echo "Error: --derivatives-dir is required for automatic mode"
     echo "Use --help for more information"
@@ -152,7 +172,7 @@ fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Configuration file not found: $CONFIG_FILE"
-    echo "Run the modelling app in interactive mode first to create the configuration"
+    echo "Run the appropriate modelling app in interactive mode first to create the configuration"
     exit 1
 fi
 
@@ -164,7 +184,7 @@ if [ -n "$BLOOD_DIR" ]; then
 fi
 
 # Build command arguments
-CMD_ARGS="--func modelling --mode automatic"
+CMD_ARGS="--func $FUNC --mode automatic"
 if [ -n "$STEP" ]; then
     CMD_ARGS="$CMD_ARGS --step $STEP"
 fi
@@ -177,6 +197,7 @@ fi
 
 echo "=== kinfitr Singularity Automatic Mode ==="
 echo "Container: $CONTAINER"
+echo "Function: $FUNC"
 echo "Derivatives directory: $DERIVATIVES_DIR"
 if [ -n "$BLOOD_DIR" ]; then
     echo "Blood directory: $BLOOD_DIR"

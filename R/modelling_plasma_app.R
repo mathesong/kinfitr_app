@@ -1,6 +1,6 @@
-#' Run kinfitr Modelling App
+#' Run kinfitr Plasma Input Modelling App
 #'
-#' @description Launch the kinfitr modelling configuration interface for setting up kinetic models
+#' @description Launch the kinfitr modelling configuration interface for setting up kinetic models with plasma input data
 #'
 #' @param bids_dir Character string path to the BIDS directory (default: NULL)
 #' @param derivatives_dir Character string path to the derivatives folder (default: bids_dir/derivatives)
@@ -8,7 +8,7 @@
 #' @param subfolder Character string name for analysis subfolder (default: "Primary_Analysis")
 #' @param config_file Character string path to existing config file (optional)
 #' @export
-modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = NULL, subfolder = "Primary_Analysis", config_file = NULL) {
+modelling_plasma_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = NULL, subfolder = "Primary_Analysis", config_file = NULL) {
   
   # Set derivatives directory logic
   if (is.null(derivatives_dir)) {
@@ -67,11 +67,71 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
   if (!is.null(blood_dir)) {
     cat("  Blood directory:", blood_dir, "\n")
   }
-  cat("  Analysis subfolder:", subfolder, "\n")
   if (!is.null(config_file)) {
     cat("  Config file:", config_file, "\n")
   }
-  
+
+  # Validate and resolve analysis folder based on configuration type
+  expected_config_type <- "plasma input"
+
+  validate_folder <- function(folder_path) {
+    config_path <- file.path(folder_path, "desc-kinfitroptions_config.json")
+
+    if (!dir.exists(folder_path)) {
+      return(list(exists = FALSE, compatible = TRUE, config_type = NULL))
+    }
+
+    if (!file.exists(config_path)) {
+      return(list(exists = TRUE, compatible = TRUE, config_type = NULL))
+    }
+
+    tryCatch({
+      config <- jsonlite::read_json(config_path)
+      config_type <- config$modelling_configuration_type
+
+      if (is.null(config_type)) {
+        return(list(exists = TRUE, compatible = TRUE, config_type = "unknown"))
+      }
+
+      compatible <- (config_type == expected_config_type)
+      return(list(exists = TRUE, compatible = compatible, config_type = config_type))
+    }, error = function(e) {
+      return(list(exists = TRUE, compatible = FALSE, config_type = "corrupted"))
+    })
+  }
+
+  # Resolve subfolder based on validation
+  if (subfolder == "Primary_Analysis") {
+    primary_check <- validate_folder(file.path(kinfitr_dir, "Primary_Analysis"))
+
+    if (primary_check$exists && !primary_check$compatible) {
+      # Primary exists with wrong type, try Secondary
+      cat("WARNING: Primary_Analysis contains", primary_check$config_type, "configuration.\n")
+      cat("Attempting to use Secondary_Analysis instead.\n")
+
+      secondary_check <- validate_folder(file.path(kinfitr_dir, "Secondary_Analysis"))
+
+      if (secondary_check$exists && !secondary_check$compatible) {
+        # Both Primary and Secondary have wrong types
+        stop("Both Primary_Analysis and Secondary_Analysis contain incompatible configurations. Please specify a different analysis folder name.", call. = FALSE)
+      }
+
+      # Use Secondary_Analysis
+      subfolder <- "Secondary_Analysis"
+      cat("Using Secondary_Analysis for this analysis.\n")
+    }
+  } else {
+    # User specified custom folder name, validate it
+    folder_check <- validate_folder(file.path(kinfitr_dir, subfolder))
+
+    if (folder_check$exists && !folder_check$compatible) {
+      stop(sprintf("Analysis folder '%s' already exists but contains configuration for %s modelling. Please choose a different folder name.",
+                   subfolder, folder_check$config_type), call. = FALSE)
+    }
+  }
+
+  cat("  Analysis subfolder:", subfolder, "\n")
+
   # Create output directory if it doesn't exist
   output_dir <- file.path(kinfitr_dir, subfolder)
   if (!dir.exists(output_dir)) {
@@ -153,7 +213,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
   ui <- fluidPage(theme = shinythemes::shinytheme("flatly"),
     
     # App title ----
-    titlePanel("kinfitr Kinetic Modelling Configuration"),
+    titlePanel("kinfitr Kinetic Modelling Configuration (Plasma Input)"),
     
     # Tab panel for all options ----
     tabsetPanel(type = "tabs",
@@ -425,34 +485,26 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                              
                              selectInput("tstar_model", "Select a model for determining t*:",
                                          choices = c("No Model Selected" = "none",
-                                                     "Logan (Invasive)" = "Logan",
-                                                     "MA1 (Invasive)" = "MA1",
-                                                     "refLogan (Non-invasive)" = "refLogan",
-                                                     "MRTM1 (Non-invasive)" = "MRTM1",
-                                                     "MRTM2 (Non-invasive)" = "MRTM2"),
+                                                     "Logan" = "Logan",
+                                                     "MA1" = "MA1"),
                                          selected = "none",
                                          width = "60%")
                     ),
                     # Tab panel for Model 1 ----
                     tabPanel("Model 1",
                              h4(""),
-                             p(glue::glue("Choose a kinetic model for fitting. ",
-                                    "Invasive models require blood input data, while non-invasive models ",
-                                    "use reference region approaches. Linear models are faster and tend to be ",
+                             p(glue::glue("Non-linear models fit full compartment models. ",
+                                    "Linear models are faster and tend to be ",
                                     "more robust to measurement error, however they provide fewer outcome parameters ",
-                                    "and can be slightly biased. Non-linear models fit full compartment models.")
+                                    "and can be slightly biased.")
                              ),
                              # Model selection drop-down menu
                              selectInput("button", "Select a model:",
                                          choices = c("No Model 1" = "none",
-                                                     "1TCM (Invasive, Non-linear)" = "1TCM",
-                                                     "2TCM (Invasive, Non-linear)" = "2TCM",
-                                                     "Logan (Invasive, Linear)" = "Logan",
-                                                     "MA1 (Invasive, Linear)" = "MA1",
-                                                     "SRTM (Non-invasive, Non-linear)" = "SRTM",
-                                                     "refLogan (Non-invasive, Linear)" = "refLogan",
-                                                     "MRTM1 (Non-invasive, Linear)" = "MRTM1",
-                                                     "MRTM2 (Non-invasive, Linear)" = "MRTM2"
+                                                     "1TCM (Non-linear)" = "1TCM",
+                                                     "2TCM (Non-linear)" = "2TCM",
+                                                     "Logan (Linear)" = "Logan",
+                                                     "MA1 (Linear)" = "MA1"
                                          ),
                                          selected = "none"),
                              # 1TCM selection panel
@@ -606,113 +658,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
-                             
-                             # SRTM selection panel
-                             conditionalPanel(
-                               condition = "input.button == 'SRTM'",
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2.start", "k2.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.lower", "k2.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.upper", "k2.upper", value = 0.5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2a.start", "k2a.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.lower", "k2a.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.upper", "k2a.upper", value = 0.5,min = 0, step=.001)),
-                               )
-                             ),
-                             
-                             # refLogan selection panel  
-                             conditionalPanel(
-                               condition = "input.button == 'refLogan'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               selectInput("k2prime_source", "k2' Parameter Source:",
-                                          choices = list("Set k2'" = "set"),
-                                          selected = "set"),
-                               numericInput("k2prime_value", "k2' Value", value = 0.1, min = 0, step = 0.001),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
-                             # MRTM1 selection panel
-                             conditionalPanel(
-                               condition = "input.button == 'MRTM1'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
-                             # MRTM2 selection panel
-                             conditionalPanel(
-                               condition = "input.button == 'MRTM2'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               selectInput("k2prime_source", "k2' Parameter Source:",
-                                          choices = list("Set k2'" = "set"),
-                                          selected = "set"),
-                               numericInput("k2prime_value", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
+
                              hr(),
                              conditionalPanel(
                                condition = "input.button != 'none'",
@@ -723,18 +669,17 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                     tabPanel("Model 2",
                              h4("Model 2"),
                              p(glue::glue("Choose a kinetic model for fitting. ",
-                                    "Invasive models require blood input data, while non-invasive models ",
-                                    "use reference region approaches. Linear models are faster and tend to be ",
-                                    "more robust to measurement error, however they provide fewer outcome parameters ",
-                                    "and can be slightly biased. Non-linear models fit full compartment models.")
+                                   "Linear models are faster and tend to be ",
+                                   "more robust to measurement error, however they provide fewer outcome parameters ",
+                                   "and can be slightly biased. Non-linear models fit full compartment models.")
                              ),
                              # Model selection drop-down menu
                              selectInput("button2", "Select a model:",
                                          choices = c("No Model 2" = "none",
-                                                     "1TCM (Invasive, Non-linear)" = "1TCM",
-                                                     "2TCM (Invasive, Non-linear)" = "2TCM",
-                                                     "Logan (Invasive, Linear)" = "Logan",
-                                                     "MA1 (Invasive, Linear)" = "MA1",
+                                                     "1TCM (Non-linear)" = "1TCM",
+                                                     "2TCM (Non-linear)" = "2TCM",
+                                                     "Logan (Linear)" = "Logan",
+                                                     "MA1 (Linear)" = "MA1",
                                                      "SRTM (Non-invasive, Non-linear)" = "SRTM",
                                                      "refLogan (Non-invasive, Linear)" = "refLogan",
                                                      "MRTM1 (Non-invasive, Linear)" = "MRTM1",
@@ -917,129 +862,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
-                             
-                             # SRTM selection panel
-                             conditionalPanel(
-                               condition = "input.button2 == 'SRTM'",
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start2", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower2", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper2", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2.start2", "k2.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.lower2", "k2.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.upper2", "k2.upper", value = 0.5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2a.start2", "k2a.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.lower2", "k2a.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.upper2", "k2a.upper", value = 0.5,min = 0, step=.001)),
-                               )
-                             ),
-                             
-                             # refLogan selection panel  
-                             conditionalPanel(
-                               condition = "input.button2 == 'refLogan'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type2", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               selectInput("k2prime_source2", "k2' Parameter Source:",
-                                          choices = list(
-                                            "Set k2'" = "set",
-                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
-                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
-                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median"
-                                          ),
-                                          selected = "set"),
-                               conditionalPanel(
-                                 condition = "input.k2prime_source2 == 'set'",
-                                 numericInput("k2prime_value2", "k2' Value", value = 0.1, min = 0, step = 0.001)
-                               ),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type2", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
-                             # MRTM1 selection panel
-                             conditionalPanel(
-                               condition = "input.button2 == 'MRTM1'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type2", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type2", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
-                             # MRTM2 selection panel
-                             conditionalPanel(
-                               condition = "input.button2 == 'MRTM2'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type2", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames2", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               selectInput("k2prime_source2", "k2' Parameter Source:",
-                                          choices = list(
-                                            "Set k2'" = "set",
-                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
-                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
-                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median"
-                                          ),
-                                          selected = "set"),
-                               conditionalPanel(
-                                 condition = "input.k2prime_source2 == 'set'",
-                                 numericInput("k2prime_value2", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
-                               ),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type2", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point2", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point2", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
+
                              hr(),
                              conditionalPanel(
                                condition = "input.button2 != 'none'",
@@ -1050,18 +873,17 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                     tabPanel("Model 3",
                              h4("Model 3"),
                              p(glue::glue("Choose a kinetic model for fitting. ",
-                                    "Invasive models require blood input data, while non-invasive models ",
-                                    "use reference region approaches. Linear models are faster and tend to be ",
-                                    "more robust to measurement error, however they provide fewer outcome parameters ",
-                                    "and can be slightly biased. Non-linear models fit full compartment models.")
+                                   "Linear models are faster and tend to be ",
+                                   "more robust to measurement error, however they provide fewer outcome parameters ",
+                                   "and can be slightly biased. Non-linear models fit full compartment models.")
                              ),
                              # Model selection drop-down menu
                              selectInput("button3", "Select a model:",
                                          choices = c("No Model 3" = "none",
-                                                     "1TCM (Invasive, Non-linear)" = "1TCM",
-                                                     "2TCM (Invasive, Non-linear)" = "2TCM",
-                                                     "Logan (Invasive, Linear)" = "Logan",
-                                                     "MA1 (Invasive, Linear)" = "MA1",
+                                                     "1TCM (Non-linear)" = "1TCM",
+                                                     "2TCM (Non-linear)" = "2TCM",
+                                                     "Logan (Linear)" = "Logan",
+                                                     "MA1 (Linear)" = "MA1",
                                                      "SRTM (Non-invasive, Non-linear)" = "SRTM",
                                                      "refLogan (Non-invasive, Linear)" = "refLogan",
                                                      "MRTM1 (Non-invasive, Linear)" = "MRTM1",
@@ -1256,135 +1078,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
                                  column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
                                )
                              ),
-                             
-                             # SRTM selection panel
-                             conditionalPanel(
-                               condition = "input.button3 == 'SRTM'",
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("R1.start3", "R1.start", value = 1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.lower3", "R1.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("R1.upper3", "R1.upper", value = 5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2.start3", "k2.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.lower3", "k2.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2.upper3", "k2.upper", value = 0.5,min = 0, step=.001)),
-                               ),
-                               fluidRow(
-                                 column(3, offset = 0, numericInput("k2a.start3", "k2a.start", value = 0.1,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.lower3", "k2a.lower", value = 0.0001,min = 0, step=.001)),
-                                 column(3, offset = 0, numericInput("k2a.upper3", "k2a.upper", value = 0.5,min = 0, step=.001)),
-                               )
-                             ),
-                             
-                             # refLogan selection panel  
-                             conditionalPanel(
-                               condition = "input.button3 == 'refLogan'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type3", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               selectInput("k2prime_source3", "k2' Parameter Source:",
-                                          choices = list(
-                                            "Set k2'" = "set",
-                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
-                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
-                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median",
-                                            "Inherit k2' from Model 2 (Regional)" = "inherit_model2_regional",
-                                            "Inherit k2' from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
-                                            "Inherit k2' from Model 2 (Median Across Regions)" = "inherit_model2_median"
-                                          ),
-                                          selected = "set"),
-                               conditionalPanel(
-                                 condition = "input.k2prime_source3 == 'set'",
-                                 numericInput("k2prime_value3", "k2' Value", value = 0.1, min = 0, step = 0.001)
-                               ),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type3", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
-                             # MRTM1 selection panel
-                             conditionalPanel(
-                               condition = "input.button3 == 'MRTM1'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type3", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type3", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
-                             # MRTM2 selection panel
-                             conditionalPanel(
-                               condition = "input.button3 == 'MRTM2'",
-                               h4("t* Definition"),
-                               p("Define t* (time point for linear analysis start) using frame numbers or time."),
-                               radioButtons("tstar_type3", "",
-                                           choices = list("Number of Frames (from the end)" = "frame", 
-                                                         "Time Point (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               numericInput("tstarIncludedFrames3", "t* (0 for all frames)", value = 10, min = 0, step = 1),
-                               
-                               h4("Other Parameters"),
-                               selectInput("k2prime_source3", "k2' Parameter Source:",
-                                          choices = list(
-                                            "Set k2'" = "set",
-                                            "Inherit k2' from Model 1 (Regional)" = "inherit_model1_regional",
-                                            "Inherit k2' from Model 1 (Mean Across Regions)" = "inherit_model1_mean",
-                                            "Inherit k2' from Model 1 (Median Across Regions)" = "inherit_model1_median",
-                                            "Inherit k2' from Model 2 (Regional)" = "inherit_model2_regional",
-                                            "Inherit k2' from Model 2 (Mean Across Regions)" = "inherit_model2_mean",
-                                            "Inherit k2' from Model 2 (Median Across Regions)" = "inherit_model2_median"
-                                          ),
-                                          selected = "set"),
-                               conditionalPanel(
-                                 condition = "input.k2prime_source3 == 'set'",
-                                 numericInput("k2prime_value3", "k2' Value (k2a prior)", value = 0.1, min = 0, step = 0.001)
-                               ),
-                               
-                               # TAC Subset Selection
-                               h4("TAC Subset Selection"),
-                               p("Specify subset of TAC data for fitting (optional). Leave blank to use all frames."),
-                               radioButtons("subset_type3", "Selection Method:",
-                                           choices = list("Frame Numbers" = "frame", 
-                                                         "Time Points (minutes)" = "time"),
-                                           selected = "time", inline = TRUE),
-                               fluidRow(
-                                 column(6, numericInput("start_point3", "Start Point", value = NULL, min = 0, step = 0.1)),
-                                 column(6, numericInput("end_point3", "End Point", value = NULL, min = 0, step = 0.1))
-                               )
-                             ),
-                             
+
                              hr(),
                              conditionalPanel(
                                condition = "input.button3 != 'none'",
@@ -1478,7 +1172,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
   
   # Define server logic for config file creation ----
   server <- function(input, output, session) {
-    
+
     # Load existing config on startup and restore UI state
     observe({
       existing_config <- load_existing_config()
@@ -2141,6 +1835,7 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
       )
       
       config_list <- list(
+        modelling_configuration_type = "plasma input",
         analysis_folder = subfolder,
         config_created = format(Sys.time(), "%Y-%m-%d %H:%M"),
         blood_dir = blood_dir,
@@ -2180,10 +1875,25 @@ modelling_app <- function(bids_dir = NULL, derivatives_dir = NULL, blood_dir = N
       tryCatch({
         config_json <- readLines(config_file_path, warn = FALSE)
         config_data <- jsonlite::fromJSON(paste(config_json, collapse = ""))
+
+        # Validate configuration type
+        config_type <- config_data$modelling_configuration_type
+        expected_type <- "plasma input"
+
+        if (!is.null(config_type) && config_type != expected_type) {
+          showNotification(
+            paste0("Configuration file is for ", config_type, " modelling. Starting with default settings."),
+            type = "warning",
+            duration = 5
+          )
+          cat("Config type mismatch: found", config_type, "expected", expected_type, "\n")
+          return(NULL)
+        }
+
         cat("Loaded existing config from:", config_file_path, "\n")
         return(config_data)
       }, error = function(e) {
-        showNotification("Unable to read existing config file. Using default settings.", 
+        showNotification("Unable to read existing config file. Using default settings.",
                         type = "error", duration = 5)
         cat("Error loading config:", e$message, "\n")
         return(NULL)

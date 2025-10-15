@@ -4,12 +4,13 @@ An R Shiny web application suite for creating customized kinfitr BIDS App config
 
 ## Overview
 
-The kinfitrapp package consists of two complementary Shiny applications that work together to provide a complete workflow for PET kinetic modeling analysis:
+The kinfitrapp package consists of three complementary Shiny applications that work together to provide a complete workflow for PET kinetic modeling analysis:
 
 1. **Region Definition App**: Creates brain region definitions and combined TACs from segmentation data
-2. **Modelling App**: Configures kinetic models and creates comprehensive analysis configurations
+2. **Modelling App with Plasma Input**: Configures invasive kinetic models (1TCM, 2TCM, Logan, MA1) requiring blood input data
+3. **Modelling App with Reference Tissue**: Configures non-invasive kinetic models (SRTM, refLogan, MRTM1, MRTM2) using reference regions
 
-Both applications support multiple usage modes including interactive GUI configuration, automated batch processing, and Docker containerization for reproducible research environments.
+All applications support multiple usage modes including interactive GUI configuration, automated batch processing, and Docker containerization for reproducible research environments.
 
 ## Features
 
@@ -92,28 +93,43 @@ docker-compose build
 
 ### R Package Usage
 
-#### Launch Both Apps Sequentially
+#### Using the Unified Launcher
 ```r
 library(kinfitrapp)
 
-# Launch both region definition and modelling apps
+# Launch region definition app (default)
+launch_apps(bids_dir = "/path/to/your/bids/dataset")
+
+# Launch plasma input modelling app
 launch_apps(
+  app = "modelling_plasma",
   bids_dir = "/path/to/your/bids/dataset",
-  region_definition = TRUE,
-  modelling = TRUE
+  blood_dir = "/path/to/blood/data"
+)
+
+# Launch reference tissue modelling app
+launch_apps(
+  app = "modelling_ref",
+  bids_dir = "/path/to/your/bids/dataset"
 )
 ```
 
-#### Launch Individual Apps
+#### Launch Apps Directly
 ```r
-# Region definition app only
+# Region definition app
 region_definition_app(bids_dir = "/path/to/bids/dataset")
 
-# Modelling app only  
-modelling_app(bids_dir = "/path/to/bids/dataset")
+# Plasma input modelling app
+modelling_plasma_app(
+  bids_dir = "/path/to/bids/dataset",
+  blood_dir = "/path/to/blood/data"
+)
 
-# Modelling app with derivatives directory
-modelling_app(
+# Reference tissue modelling app
+modelling_ref_app(bids_dir = "/path/to/bids/dataset")
+
+# Using derivatives directory directly
+modelling_plasma_app(
   derivatives_dir = "/path/to/derivatives",
   blood_dir = "/path/to/blood/data"
 )
@@ -137,9 +153,9 @@ docker run -it --rm \
 # Then open http://localhost:3838 in your browser
 ```
 
-**Modelling App (Interactive)**
+**Modelling App with Plasma Input (Interactive)**
 ```bash
-# Launch modelling app interactively
+# Launch modelling app with plasma input interactively
 docker run -it --rm \
   --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
@@ -147,14 +163,28 @@ docker run -it --rm \
   -v /path/to/your/blood:/data/blood_dir:ro \
   -p 3838:3838 \
   mathesong/kinfitr_app:latest \
-  --func modelling
+  --func modelling_plasma
+
+# Then open http://localhost:3838 in your browser
+```
+
+**Modelling App with Reference Tissue (Interactive)**
+```bash
+# Launch modelling app with reference tissue interactively
+docker run -it --rm \
+  --user $(id -u):$(id -g) \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  -p 3838:3838 \
+  mathesong/kinfitr_app:latest \
+  --func modelling_ref
 
 # Then open http://localhost:3838 in your browser
 ```
 
 **Detached Mode (Background - use docker logs to see startup messages)**
 ```bash
-# Launch modelling app in background
+# Launch modelling app with plasma input in background
 docker run -d --name kinfitr-server \
   --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
@@ -162,7 +192,7 @@ docker run -d --name kinfitr-server \
   -v /path/to/your/blood:/data/blood_dir:ro \
   -p 3838:3838 \
   mathesong/kinfitr_app:latest \
-  --func modelling
+  --func modelling_plasma
 
 # Check startup messages and get browser URL
 docker logs kinfitr-server
@@ -176,14 +206,23 @@ docker rm kinfitr-server
 
 #### Automatic Processing
 ```bash
-# Run complete analysis pipeline
+# Run complete analysis pipeline with plasma input models
 docker run --rm \
   --user $(id -u):$(id -g) \
   -v /path/to/your/bids:/data/bids_dir:ro \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -v /path/to/your/blood:/data/blood_dir:ro \
   mathesong/kinfitr_app:latest \
-  --func modelling \
+  --func modelling_plasma \
+  --mode automatic
+
+# Run complete analysis pipeline with reference tissue models
+docker run --rm \
+  --user $(id -u):$(id -g) \
+  -v /path/to/your/bids:/data/bids_dir:ro \
+  -v /path/to/your/derivatives:/data/derivatives_dir:rw \
+  mathesong/kinfitr_app:latest \
+  --func modelling_ref \
   --mode automatic
 
 # Run specific analysis step
@@ -193,7 +232,7 @@ docker run --rm \
   -v /path/to/your/derivatives:/data/derivatives_dir:rw \
   -v /path/to/your/blood:/data/blood_dir:ro \
   mathesong/kinfitr_app:latest \
-  --func modelling \
+  --func modelling_plasma \
   --mode automatic \
   --step weights
 ```
@@ -318,22 +357,23 @@ docker run --rm \
   --user $(id -u):$(id -g) \
   -v /study/bids:/data/bids_dir:ro \
   -v /study/derivatives:/data/derivatives_dir:rw \
-  -v /study/blood:/data/blood_dir:ro \  # Only needed for invasive + delay
+  -v /study/blood:/data/blood_dir:ro \  # Only needed for plasma input + delay
   mathesong/kinfitr_app:latest \
-  --func modelling --mode automatic --step delay
+  --func modelling_plasma --mode automatic --step delay
 ```
 
 #### Server Deployment
 ```bash
-# Production server deployment
+# Production server deployment with plasma input
 docker run -d --name kinfitr-server \
   --user $(id -u):$(id -g) \
   --restart unless-stopped \
   -v /data/studies:/data/bids_dir:ro \
   -v /data/derivatives:/data/derivatives_dir:rw \
+  -v /data/blood:/data/blood_dir:ro \
   -p 8080:3838 \
   mathesong/kinfitr_app:latest \
-  --func modelling
+  --func modelling_plasma
 
 # Access at http://your-server:8080
 ```
@@ -344,19 +384,26 @@ docker run -d --name kinfitr-server \
 ```bash
 cd docker/
 
-# Launch interactive modelling app
-docker-compose up kinfitr-interactive
+# Launch interactive modelling app with plasma input
+docker-compose up kinfitr-modelling-plasma
 # Access at http://localhost:3838
 
-# Launch region definition app  
+# Launch interactive modelling app with reference tissue
+docker-compose up kinfitr-modelling-ref
+# Access at http://localhost:3840
+
+# Launch region definition app
 docker-compose up kinfitr-regiondef
 # Access at http://localhost:3839
 
-# Test automatic processing
-docker-compose up kinfitr-auto-full
+# Test automatic processing with plasma input
+docker-compose up kinfitr-auto-plasma-full
+
+# Test automatic processing with reference tissue
+docker-compose up kinfitr-auto-ref-full
 
 # Test specific step processing
-docker-compose up kinfitr-auto-step
+docker-compose up kinfitr-auto-plasma-step
 ```
 
 #### Local Development
@@ -365,7 +412,7 @@ docker-compose up kinfitr-auto-step
 devtools::load_all()
 
 # Test functions locally
-validate_directory_requirements("modelling", "automatic", "/path/to/bids", NULL)
+validate_directory_requirements("modelling_plasma", "automatic", "/path/to/bids", NULL)
 
 # Test automatic pipeline
 result <- run_automatic_pipeline("/path/to/analysis", "/path/to/bids")
@@ -535,10 +582,10 @@ docker run --rm mathesong/kinfitr_app:latest --help
 # Test with docker-compose (recommended for development)
 cd docker/
 docker-compose build
-docker-compose up kinfitr-interactive
+docker-compose up kinfitr-modelling-plasma
 
 # Verify the build worked with a simple test
-docker run --rm mathesong/kinfitr_app:latest --func modelling --help
+docker run --rm mathesong/kinfitr_app:latest --func modelling_plasma --help
 ```
 
 #### Build Troubleshooting

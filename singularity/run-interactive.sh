@@ -25,7 +25,7 @@ Usage: $0 [options]
 
 Options:
     -c, --container PATH    Path to Singularity container (default: $CONTAINER)
-    -f, --func FUNC         App function: 'regiondef' or 'modelling' (default: $FUNC)
+    -f, --func FUNC         App function: 'regiondef', 'modelling_plasma', or 'modelling_ref' (default: $FUNC)
     -p, --port PORT         Internal port for Shiny app (default: $PORT)
     --host-port PORT        Host port to map to (default: $HOST_PORT)
     --bids-dir PATH         Path to BIDS directory to mount
@@ -111,8 +111,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [ "$FUNC" != "regiondef" ] && [ "$FUNC" != "modelling" ]; then
-    echo "Error: --func must be 'regiondef' or 'modelling'"
+if [ "$FUNC" != "regiondef" ] && [ "$FUNC" != "modelling_plasma" ] && [ "$FUNC" != "modelling_ref" ]; then
+    echo "Error: --func must be 'regiondef', 'modelling_plasma', or 'modelling_ref'"
     exit 1
 fi
 

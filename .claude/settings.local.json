@@ -3,7 +3,8 @@
     "allow": [
       "Bash(R:*)",
       "Bash(ls:*)",
-      "Bash(docker-compose build:*)"
+      "Bash(docker-compose build:*)",
+      "Bash(sed:*)"
     ]
   },
   "enableAllProjectMcpServers": false
